@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="h-screen w-screen bg-slate-100 flex flex-col">
+<body class="h-screen w-screen bg-slate-100 flex flex-col"  data-toko-id="{{ toko.id }}" data-toko-nama="{{ toko.nama }}" data-toko-alamat="{{ toko.alamat }}">
 
   <!-- Header Navigasi (konsisten) -->
   <header class="bg-blue-600 text-white p-4 flex justify-between items-center">
@@ -65,10 +65,16 @@
               <td class="p-2 border">
                 <div class="flex items-center gap-2">
                   <button class="px-2 py-1 bg-emerald-600 text-white rounded text-xs"
-                          onclick="printById({{ id }})">🧾 Cetak Ulang</button>
+                          onclick="printById({{ id }}, {
+                              nama: document.body.dataset.tokoNama || '',
+                              alamat: document.body.dataset.tokoAlamat || ''
+                          })">🧾 Cetak Ulang</button>
                   {% if hp %}
                   <button class="px-2 py-1 bg-blue-600 text-white rounded text-xs"
-                          onclick="waById({{ id }}, '{{ (nama or '')|e }}', '{{ hp|e }}')">📲 Kirim WA</button>
+                          onclick="waById({{ id }}, '{{ (nama or '')|e }}', '{{ hp|e }}', {
+                              nama: document.body.dataset.tokoNama || '',
+                              alamat: document.body.dataset.tokoAlamat || ''
+                          })">📲 Kirim WA</button>
                   {% endif %}
                 </div>
               </td>
@@ -111,116 +117,156 @@
       document.getElementById('q').value = "";
       doFilter();
     }
+function generateNota(head, items, toko) {
+  const total = items.reduce(
+    (a, b) => a + (b.qty * b.harga_jual - (b.potongan || 0)),
+    0
+  );
 
-    function printNotaFromData(head, items){
-      const notaId = "TX-" + (head.id_hex || "").toUpperCase();
-      const total = items.reduce((a,b)=> a + (b.qty*b.harga_jual - (b.potongan||0)), 0);
-      let rows = "";
-      items.forEach(it=>{
-        const sub = it.qty*it.harga_jual - (it.potongan||0);
-        rows += `<tr>
-          <td>${it.nama}</td>
-          <td>${it.qty} x ${fmt(it.harga_jual)}</td>
-          <td class="text-right">${fmt(sub)}</td>
-        </tr>`;
-      });
+  // kode TX pakai client_tx_id → ambil 8 digit terakhir
+  const notaId = "TX-" + ((head.client_tx_id || "").slice(-8).toUpperCase());
 
-      const html = `
-        <html>
-          <head>
-            <title>Struk Penjualan</title>
-            <style>
-              body { font-family: monospace; font-size: 12px; }
-              h2 { text-align: center; margin: 4px 0; }
-              table { width: 100%; border-collapse: collapse; }
-              td { padding: 2px 0; }
-            </style>
-          </head>
-          <body>
-            <h2>🛒 STRUK PENJUALAN</h2>
-            <div>No: ${notaId}</div>
-            <div>${new Date(head.tanggal).toLocaleString('id-ID')}</div>
-            <hr/>
-            <table>${rows}</table>
-            <hr/>
-            <table>
-              <tr><td>Total</td><td colspan="2" class="text-right">${fmt(total)}</td></tr>
-              <tr><td>Bayar</td><td colspan="2" class="text-right">${fmt(head.bayar)}</td></tr>
-              <tr><td>Kembali</td><td colspan="2" class="text-right">${fmt(head.kembalian)}</td></tr>
-              <tr><td>Metode</td><td colspan="2" class="text-right">${head.metode_bayar}</td></tr>
-            </table>
-            <hr/>
-            <div style="text-align:center">Terima Kasih 🙏</div>
-            <script>
-              window.onload = function(){ window.print(); setTimeout(()=>window.close(), 300); }
-            <\/script>
-          </body>
-        </html>
-      `;
-      const w = window.open("", "printWin");
-      w.document.write(html);
-      w.document.close();
+  // pakai tanggal dari head.tanggal atau head.tanggal_client
+  const tanggalStr = new Date(head.tanggal || head.tanggal_client || Date.now())
+    .toLocaleString("id-ID");
+
+  // baris item
+  const textLines = items.map(it => {
+    const sub = it.qty * it.harga_jual - (it.potongan || 0);
+    return `${it.qty}x ${it.nama} @${fmt(it.harga_jual)} = ${fmt(sub)}`;
+  });
+
+  // versi teks polos (WA)
+  const text = [
+    (toko?.nama || "STRUK PENJUALAN"),
+    (toko?.alamat || ""),
+    `No: ${notaId}`,
+    tanggalStr,
+    "---------------------------",
+    ...textLines,
+    "---------------------------",
+    `TOTAL    : ${fmt(total)}`,
+    `BAYAR    : ${fmt(head.bayar)}`,
+    `KEMBALI  : ${fmt(head.kembalian)}`,
+    `METODE   : ${head.metode_bayar || ""}`,
+    "",
+    "Terima Kasih 🙏"
+  ].filter(Boolean).join("\n");
+
+  // versi HTML (58mm printer)
+  const html = `
+  <div style="font-family: monospace; font-size:12px; max-width:320px; margin:0 auto">
+    <div style="text-align:center; font-weight:bold">${toko?.nama || "STRUK PENJUALAN"}</div>
+    ${toko?.alamat ? `<div style="text-align:center">${toko.alamat}</div>` : ""}
+    <hr/>
+    <div>No: ${notaId}</div>
+    <div>${tanggalStr}</div>
+    <hr/>
+
+    <table style="width:100%; border-collapse:collapse; font-size:12px">
+      <thead>
+        <tr>
+          <th style="text-align:left">Item</th>
+          <th style="text-align:right">Qty</th>
+          <th style="text-align:right">Harga</th>
+          <th style="text-align:right">Sub</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${items.map(it => {
+          const sub = it.qty * it.harga_jual - (it.potongan || 0);
+          return `
+            <tr>
+              <td style="text-align:left">${it.nama}</td>
+              <td style="text-align:right">${it.qty}</td>
+              <td style="text-align:right">${fmt(it.harga_jual)}</td>
+              <td style="text-align:right">${fmt(sub)}</td>
+            </tr>
+          `;
+        }).join("")}
+      </tbody>
+    </table>
+
+    <hr/>
+    <table style="width:100%; font-size:12px">
+      <tr><td>Total</td><td style="text-align:right">${fmt(total)}</td></tr>
+      <tr><td>Bayar</td><td style="text-align:right">${fmt(head.bayar)}</td></tr>
+      <tr><td>Kembali</td><td style="text-align:right">${fmt(head.kembalian)}</td></tr>
+      <tr><td>Metode</td><td style="text-align:right">${head.metode_bayar || ""}</td></tr>
+    </table>
+    <hr/>
+    <div style="text-align:center">Terima Kasih 🙏</div>
+  </div>
+`;
+
+
+  return { html, text };
+}
+
+function printNotaFromData(head, items, toko) {
+  const { html } = generateNota(head, items, toko);
+  const w = window.open("", "printWin");
+  w.document.write(`
+    <html>
+      <head>
+        <title>Struk Penjualan</title>
+        <style>body { font-family: monospace; font-size: 12px; }</style>
+      </head>
+      <body>
+        ${html}
+        <script>
+          window.onload = function(){ window.print(); setTimeout(()=>window.close(), 300); }
+        <\/script>
+      </body>
+    </html>
+  `);
+  w.document.close();
+}
+
+async function fetchDetail(id) {
+  const r = await fetch(`/api/penjualan/${id}`);
+  if (!r.ok) throw new Error("Gagal ambil detail");
+  return r.json(); 
+  // { header:{client_tx_id,tanggal,...}, items:[{nama, qty, harga_jual, potongan}, ...] }
+}
+
+async function printById(id, toko) {
+  try {
+    const data = await fetchDetail(id);
+    printNotaFromData(data.header, data.items, toko);
+  } catch (e) {
+    alert("Gagal cetak ulang: " + e.message);
+  }
+}
+
+async function waById(id, nama, no_hp, toko) {
+  try {
+    const data = await fetchDetail(id);
+
+    const number = (no_hp && /^62\d+$/.test(no_hp))
+      ? no_hp
+      : (data.header.no_hp || "");
+    if (!/^62\d+$/.test(number)) {
+      alert("Nomor WA tidak valid");
+      return;
     }
 
-    async function fetchDetail(id){
-      const r = await fetch(`/api/penjualan/${id}`);
-      if(!r.ok) throw new Error("Gagal ambil detail");
-      return r.json(); // { header:{id, id_hex, tanggal, metode_bayar, bayar, kembalian, pembeli_nama, no_hp}, items:[{nama, qty, harga_jual, potongan}, ...] }
-    }
+    const { text } = generateNota(data.header, data.items, toko);
 
-    async function printById(id){
-      try{
-        const data = await fetchDetail(id);
-        printNotaFromData(data.header, data.items);
-      }catch(e){
-        alert("Gagal cetak ulang: "+e.message);
-      }
-    }
+    const r = await fetch("/api/send-wa", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ number, message: text })
+    });
+    const js = await r.json();
+    if (!r.ok) throw new Error(js.msg || "Gagal kirim WA");
+    alert("Pesan WA terkirim ✅");
+  } catch (e) {
+    alert("Gagal kirim WA: " + e.message);
+  }
+}
 
-    function buildWaText(header, items){
-      const notaId = "TX-" + (header.id_hex || "").toUpperCase();
-      const total = items.reduce((a,b)=> a + (b.qty*b.harga_jual - (b.potongan||0)), 0);
-      let itemsTxt = "";
-      items.forEach(it=>{
-        const sub = it.qty*it.harga_jual - (it.potongan||0);
-        itemsTxt += `${it.nama} (${it.qty}x${fmt(it.harga_jual)}) = ${fmt(sub)}\n`;
-      });
-      return (
-        `🛒 *Struk Penjualan*\n` +
-        `No: ${notaId}\n` +
-        `${new Date(header.tanggal).toLocaleString('id-ID')}\n` +
-        `====================\n` +
-        itemsTxt +
-        `--------------------\n` +
-        `Total    : ${fmt(total)}\n` +
-        `Bayar    : ${fmt(header.bayar)}\n` +
-        `Kembali  : ${fmt(header.kembalian)}\n` +
-        `====================\n` +
-        `Terima Kasih 🙏\n` +
-        `- Kasir Offline`
-      );
-    }
 
-    async function waById(id, nama, no_hp){
-      try{
-        const data = await fetchDetail(id);
-        // gunakan no_hp dari parameter jika tersedia, jika tidak dari header
-        const number = (no_hp && /^62\d+$/.test(no_hp)) ? no_hp : (data.header.no_hp || "");
-        if(!/^62\d+$/.test(number)){ alert("Nomor WA tidak valid"); return; }
-        const message = buildWaText(data.header, data.items);
-
-        const r = await fetch("/api/send-wa", {
-          method:"POST",
-          headers:{"Content-Type":"application/json"},
-          body: JSON.stringify({ number, message })
-        });
-        const js = await r.json();
-        if(!r.ok){ throw new Error(js.msg||"Gagal kirim WA"); }
-        alert("Pesan WA terkirim ✅");
-      }catch(e){
-        alert("Gagal kirim WA: "+e.message);
-      }
-    }
   </script>
 </body>
 </html>

@@ -1,16 +1,18 @@
 <!DOCTYPE html>
 <html lang="id">
+
 <head>
   <meta charset="UTF-8" />
-  <title>Kasir Penjualan — Offline First</title>
+  <title>Kasir Penjualan — Toko {{ toko.nama }}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="h-screen w-screen bg-slate-100 flex flex-col">
+
+<body class="h-screen w-screen bg-slate-100 flex flex-col" data-toko-id="{{ toko.id }}" data-toko-nama="{{ toko.nama }}" data-toko-alamat="{{ toko.alamat }}">
 
   <!-- Header Navigasi -->
   <header class="bg-blue-600 text-white p-4 flex justify-between items-center">
-    <div class="text-xl font-bold">🛒 Kasir Penjualan</div>
+    <div class="text-xl font-bold">🛒 Toko {{ toko.nama }}</div>
     <nav class="flex gap-4 text-sm">
       <a href="{{ url_for('kasir') }}" class="hover:underline">🏠 Kasir</a>
       <a href="{{ url_for('penjualan_hari_ini') }}" class="hover:underline">📄 Penjualan Hari Ini</a>
@@ -23,9 +25,10 @@
     <!-- Left: list belanja -->
     <section class="flex-1 bg-white rounded shadow-sm p-3 flex flex-col overflow-hidden">
       <div class="flex items-center gap-2 mb-2">
-        <button id="btnTambah" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded text-sm" title="Shortcut: +">➕ Tambah ( + )</button>
+        <button id="btnTambah" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded text-sm"
+          title="Shortcut: +">➕ Tambah ( + )</button>
         <input id="quickBarcode" placeholder="🔍 Scan / ketik barcode lalu Enter"
-               class="flex-1 border rounded px-3 py-2 text-sm" />
+          class="flex-1 border rounded px-3 py-2 text-sm" />
       </div>
 
       <div class="overflow-auto flex-1 border rounded">
@@ -37,7 +40,7 @@
               <th class="p-2 border text-left">Nama</th>
               <th class="p-2 border">Qty</th>
               <th class="p-2 border">Harga</th>
-    <th class="p-2 border">Potongan</th>
+              <th class="p-2 border">Potongan</th>
               <th class="p-2 border">Subtotal</th>
               <th class="p-2 border">Aksi</th>
             </tr>
@@ -51,7 +54,8 @@
     <aside class="w-full md:w-1/3 bg-white rounded shadow-sm p-4 flex flex-col">
       <div class="text-center text-2xl font-bold">💰 TOTAL</div>
       <div id="totalView" class="text-center text-6xl font-extrabold text-emerald-600 my-6">Rp 0</div>
-      <button id="btnBayar" class="bg-emerald-500 hover:bg-emerald-600 text-white py-4 text-xl rounded mt-auto" title="Shortcut: F2">
+      <button id="btnBayar" class="bg-emerald-500 hover:bg-emerald-600 text-white py-4 text-xl rounded mt-auto"
+        title="Shortcut: F2">
         💵 Bayar (F2)
       </button>
     </aside>
@@ -59,44 +63,45 @@
 
   <!-- Modal Item (tetap sama dengan sebelumnya, pakai barcode + nama + harga + qty) -->
   <div id="itemModal" class="fixed inset-0 bg-black/60 hidden items-center justify-center z-20">
-  <div class="bg-white w-[480px] max-w-[92vw] rounded shadow-lg p-5">
-    <div class="flex items-center justify-between mb-3">
-      <h2 class="text-lg font-semibold">➕ Tambah Barang</h2>
-      <button class="text-slate-500 hover:text-slate-700" onclick="closeModal('itemModal')" title="Esc">❌</button>
-    </div>
+    <div class="bg-white w-[480px] max-w-[92vw] rounded shadow-lg p-5">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-lg font-semibold">➕ Tambah Barang</h2>
+        <button class="text-slate-500 hover:text-slate-700" onclick="closeModal('itemModal')" title="Esc">❌</button>
+      </div>
 
-    <div class="grid grid-cols-2 gap-3">
-      <label class="col-span-2">
-        <span class="text-sm text-slate-600">Scan / Barcode</span>
-        <input id="mBarcode" class="w-full border rounded px-3 py-2" placeholder="Scan di sini lalu Enter">
-      </label>
+      <div class="grid grid-cols-2 gap-3">
+        <label class="col-span-2">
+          <span class="text-sm text-slate-600">Scan / Barcode</span>
+          <input id="mBarcode" class="w-full border rounded px-3 py-2" placeholder="Scan di sini lalu Enter">
+        </label>
 
-      <label class="col-span-2">
-        <span class="text-sm text-slate-600">Nama</span>
-        <input id="mNama" class="w-full border rounded px-3 py-2" placeholder="Nama barang">
-      </label>
+        <label class="col-span-2">
+          <span class="text-sm text-slate-600">Nama</span>
+          <input id="mNama" class="w-full border rounded px-3 py-2" placeholder="Nama barang">
+        </label>
 
-      <label>
-        <span class="text-sm text-slate-600">Harga Jual</span>
-        <input id="mHargaJual" type="number" class="w-full border rounded px-3 py-2">
-      </label>
+        <label>
+          <span class="text-sm text-slate-600">Harga Jual</span>
+          <input id="mHargaJual" type="number" class="w-full border rounded px-3 py-2">
+        </label>
 
-      <label>
-        <span class="text-sm text-slate-600">Harga Beli</span>
-        <input id="mHargaBeli" type="number" class="w-full border rounded px-3 py-2">
-      </label>
+        <label>
+          <span class="text-sm text-slate-600">Harga Beli</span>
+          <input id="mHargaBeli" type="number" class="w-full border rounded px-3 py-2">
+        </label>
 
-      <label>
-        <span class="text-sm text-slate-600">Qty</span>
-        <input id="mQty" type="number" value="1" class="w-full border rounded px-3 py-2">
-      </label>
+        <label>
+          <span class="text-sm text-slate-600">Qty</span>
+          <input id="mQty" type="number" value="1" class="w-full border rounded px-3 py-2">
+        </label>
 
-      <div class="flex items-end justify-end gap-2 col-span-2">
-        <button class="px-4 py-2 bg-slate-300 rounded" onclick="clearItemForm()">🧹 Bersih</button>
-        <button class="px-4 py-2 bg-blue-600 text-white rounded" onclick="commitItem()">💾 Simpan & Lanjut (Enter)</button>
+        <div class="flex items-end justify-end gap-2 col-span-2">
+          <button class="px-4 py-2 bg-slate-300 rounded" onclick="clearItemForm()">🧹 Bersih</button>
+          <button class="px-4 py-2 bg-blue-600 text-white rounded" onclick="commitItem()">💾 Simpan & Lanjut
+            (Enter)</button>
+        </div>
       </div>
     </div>
-  </div>
     <!-- isi sama seperti versi sebelumnya -->
   </div>
 
@@ -114,22 +119,21 @@
           <span id="payTotal" class="font-semibold">Rp 0</span>
         </div>
 
-<!-- Pilih Pembeli + tombol tambah -->
-<label class="block">
-  <span class="text-sm text-slate-600">Pilih Pembeli</span>
-  <div class="flex gap-2">
-    <select id="payPembeli" class="flex-1 border rounded px-3 py-2">
-      <option value="">(Tanpa pembeli)</option>
-      {% for p in pembeli %}
-        <option value="{{ p[0] }}">{{ p[1] }} — {{ p[2] }}</option>
-      {% endfor %}
-      <!-- opsi dari localStorage (jika ada) akan ditambahkan via JS -->
-    </select>
-    <button type="button"
-            class="px-3 py-2 bg-blue-500 text-white rounded"
-            onclick="openModal('custModal')">➕</button>
-  </div>
-</label>
+        <!-- Pilih Pembeli + tombol tambah -->
+        <label class="block">
+          <span class="text-sm text-slate-600">Pilih Pembeli</span>
+          <div class="flex gap-2">
+            <select id="payPembeli" class="flex-1 border rounded px-3 py-2">
+              <option value="">(Tanpa pembeli)</option>
+              {% for p in pembeli %}
+              <option value="{{ p[0] }}" data-hp="{{ p[2] }}">{{ p[1] }} — {{ p[2] }}</option>
+              {% endfor %}
+              <!-- opsi dari localStorage (jika ada) akan ditambahkan via JS -->
+            </select>
+            <button type="button" class="px-3 py-2 bg-blue-500 text-white rounded"
+              onclick="openModal('custModal')">➕</button>
+          </div>
+        </label>
 
 
         <label class="block">
@@ -152,43 +156,46 @@
 
         <div class="flex justify-end gap-2 pt-2">
           <button class="px-4 py-2 bg-slate-300 rounded" onclick="closeModal('payModal')">Batal (Esc)</button>
-          <button id="btnSelesai" class="px-4 py-2 bg-emerald-600 text-white rounded" onclick="finishPayment()" title="Enter">✅ Selesai (Enter)</button>
+          <button id="btnSelesai" class="px-4 py-2 bg-emerald-600 text-white rounded" onclick="finishPayment()"
+            title="Enter">✅ Selesai (Enter)</button>
         </div>
       </div>
     </div>
   </div>
-<!-- Modal Tambah Pembeli -->
-<div id="custModal" class="fixed inset-0 bg-black/60 hidden items-center justify-center z-40">
-  <div class="bg-white p-5 rounded w-[420px] max-w-[92vw]">
-    <div class="flex items-center justify-between mb-3">
-      <h3 class="font-bold">➕ Tambah Pembeli</h3>
-      <button class="text-slate-500 hover:text-slate-700" onclick="closeModal('custModal')" title="Esc">❌</button>
-    </div>
+  <!-- Modal Tambah Pembeli -->
+  <div id="custModal" class="fixed inset-0 bg-black/60 hidden items-center justify-center z-40">
+    <div class="bg-white p-5 rounded w-[420px] max-w-[92vw]">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="font-bold">➕ Tambah Pembeli</h3>
+        <button class="text-slate-500 hover:text-slate-700" onclick="closeModal('custModal')" title="Esc">❌</button>
+      </div>
 
-    <label class="block mb-2">Nama
-      <input id="cNama" class="w-full border rounded px-3 py-2" placeholder="Nama pembeli">
-    </label>
-    <label class="block mb-2">Nomor HP (WA)
-      <input id="cHp" class="w-full border rounded px-3 py-2" placeholder="62812xxxxxx">
-    </label>
-    <label class="block mb-4">Alamat (opsional)
-      <input id="cAlamat" class="w-full border rounded px-3 py-2" placeholder="Alamat">
-    </label>
+      <label class="block mb-2">Nama
+        <input id="cNama" class="w-full border rounded px-3 py-2" placeholder="Nama pembeli">
+      </label>
+      <label class="block mb-2">Nomor HP (WA)
+        <input id="cHp" class="w-full border rounded px-3 py-2" placeholder="62812xxxxxx">
+      </label>
+      <label class="block mb-4">Alamat (opsional)
+        <input id="cAlamat" class="w-full border rounded px-3 py-2" placeholder="Alamat">
+      </label>
 
-    <div class="flex justify-end gap-2">
-      <button class="px-4 py-2 bg-slate-300 rounded" onclick="closeModal('custModal');focusPayAmount();">Batal</button>
-      <button class="px-4 py-2 bg-blue-600 text-white rounded" onclick="saveCustomer()">Simpan</button>
+      <div class="flex justify-end gap-2">
+        <button class="px-4 py-2 bg-slate-300 rounded"
+          onclick="closeModal('custModal');focusPayAmount();">Batal</button>
+        <button class="px-4 py-2 bg-blue-600 text-white rounded" onclick="saveCustomer()">Simpan</button>
+      </div>
     </div>
   </div>
-</div>
 
   <!-- Footer shortcut -->
   <footer class="bg-slate-200 text-slate-700 text-sm p-2 text-center">
-    Shortcut: <kbd class="px-1">+</kbd> tambah, <kbd class="px-1">Enter</kbd> simpan & lanjut, 
+    Shortcut: <kbd class="px-1">+</kbd> tambah, <kbd class="px-1">Enter</kbd> simpan & lanjut,
     <kbd class="px-1">F2</kbd> bayar, <kbd class="px-1">Esc</kbd> tutup
   </footer>
 
   <!-- Script -->
   {% include 'kasir_script.html' %}
 </body>
+
 </html>

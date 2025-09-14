@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <title>Login — Kasir</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="h-screen w-screen bg-slate-100 flex flex-col">
+
+  <!-- Header Navigasi -->
+  <header class="bg-blue-600 text-white p-4 flex justify-between items-center">
+    <div class="text-xl font-bold">🔑 Login Kasir</div>
+    <nav class="flex gap-4 text-sm">
+      <a href="{{ url_for('login') }}" class="hover:underline font-semibold underline">Login</a>
+    </nav>
+  </header>
+
+  <!-- Main -->
+  <main class="flex-1 flex items-center justify-center p-4">
+    <section class="bg-white rounded shadow-sm p-6 w-full max-w-sm">
+      <h2 class="text-lg font-semibold mb-4">Silakan Login</h2>
+
+      {% if error %}
+      <div class="bg-red-100 text-red-700 text-sm p-2 rounded mb-3">
+        {{ error }}
+      </div>
+      {% endif %}
+
+      <form method="post" class="flex flex-col gap-3">
+        <label class="block">
+          <span class="text-sm text-slate-600">Username</span>
+          <input type="text" name="username" required
+                 class="w-full border rounded px-3 py-2" placeholder="username">
+        </label>
+
+        <label class="block">
+          <span class="text-sm text-slate-600">Password</span>
+          <input type="password" name="password" required
+                 class="w-full border rounded px-3 py-2" placeholder="••••••••">
+        </label>
+
+        <button type="submit"
+                class="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded">
+          Masuk
+        </button>
+      </form>
+    </section>
+  </main>
+
+  <!-- Footer -->
+  <footer class="bg-slate-200 text-slate-700 text-sm p-2 text-center">
+    &copy; 2025 Kasir Offline First
+  </footer>
+
+</body>
+</html>
