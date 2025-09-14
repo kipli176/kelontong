@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <title>Penjualan Hari Ini — Kasir</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="h-screen w-screen bg-slate-100 flex flex-col">
+
+  <!-- Header Navigasi (konsisten) -->
+  <header class="bg-blue-600 text-white p-4 flex justify-between items-center">
+    <div class="text-xl font-bold">📄 Penjualan Hari Ini</div>
+    <nav class="flex gap-4 text-sm">
+      <a href="{{ url_for('kasir') }}" class="hover:underline">🏠 Kasir</a>
+      <a href="{{ url_for('penjualan_hari_ini') }}" class="hover:underline font-semibold underline">📄 Penjualan Hari Ini</a>
+      <a href="{{ url_for('laporan') }}" class="hover:underline">📊 Laporan</a>
+    </nav>
+  </header>
+
+  <!-- Main -->
+  <main class="flex-1 p-3 flex flex-col gap-3 overflow-hidden">
+    <!-- Filter bar -->
+    <section class="bg-white rounded shadow-sm p-3 flex items-center gap-2">
+      <input id="q" placeholder="🔎 Cari pembeli / no HP / No Transaksi (TX-)"
+             class="flex-1 border rounded px-3 py-2 text-sm" />
+      <button onclick="doFilter()" class="px-3 py-2 bg-blue-600 text-white rounded text-sm">Cari</button>
+      <button onclick="resetFilter()" class="px-3 py-2 bg-slate-200 rounded text-sm">Reset</button>
+    </section>
+
+    <!-- Tabel transaksi -->
+    <section class="bg-white rounded shadow-sm p-3 overflow-hidden flex-1 flex flex-col">
+      
+<div class="flex items-center justify-between mb-2">
+  <div class="text-lg font-semibold">Transaksi tanggal: {{ rows[0][1] if rows|length > 0 else '' }}</div>
+  <div class="flex items-center gap-2">
+    <a href="{{ url_for('export_hari_ini_xlsx') }}" class="px-3 py-2 bg-emerald-600 text-white rounded text-sm">⬇️ Export XLSX</a>
+    <!--span class="text-sm text-slate-600">Total transaksi: {{ rows|length }}</span-->
+  </div>
+</div>
+
+      <div class="border rounded overflow-auto">
+        <table class="w-full text-sm">
+          <thead class="bg-slate-100 sticky top-0">
+            <tr>
+              <th class="p-2 border">Waktu</th>
+              <th class="p-2 border">No Transaksi</th>
+              <th class="p-2 border">Pembeli</th>
+              <th class="p-2 border text-right">Total</th>
+              <th class="p-2 border text-right">Laba</th>
+              <th class="p-2 border">Aksi</th>
+            </tr>
+          </thead>
+          <tbody id="txTable">
+  {% set ns = namespace(gtotal=0, glaba=0) %}
+            {% for id, tgl, tx8, nama, hp, total, laba in rows %}
+    {% set ns.gtotal = ns.gtotal + (total or 0) %}
+    {% set ns.glaba = ns.glaba + (laba or 0) %}
+            <tr class="odd:bg-white even:bg-slate-50">
+              <td class="p-2 border whitespace-nowrap">{{ tgl.strftime("%H:%M:%S") }}</td>
+              <td class="p-2 border font-mono">TX-{{ tx8|upper }}</td>
+              <td class="p-2 border">{{ nama or "-" }}{% if hp %} — {{ hp }}{% endif %}</td>
+              <td class="p-2 border text-right">Rp {{ "{:,.0f}".format(total or 0) }}</td>
+              <td class="p-2 border text-right text-emerald-700">Rp {{ "{:,.0f}".format(laba or 0) }}</td>
+              <td class="p-2 border">
+                <div class="flex items-center gap-2">
+                  <button class="px-2 py-1 bg-emerald-600 text-white rounded text-xs"
+                          onclick="printById({{ id }})">🧾 Cetak Ulang</button>
+                  {% if hp %}
+                  <button class="px-2 py-1 bg-blue-600 text-white rounded text-xs"
+                          onclick="waById({{ id }}, '{{ (nama or '')|e }}', '{{ hp|e }}')">📲 Kirim WA</button>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+            {% else %}
+            <tr><td class="p-4 text-center text-slate-500" colspan="6">Belum ada transaksi hari ini.</td></tr>
+            {% endfor %}
+          </tbody>
+<tfoot class="bg-slate-200 font-semibold">
+  <tr>
+    <td class="p-2 border text-right" colspan="3">TOTAL</td>
+    <td class="p-2 border text-right">Rp {{ "{:,.0f}".format(ns.gtotal) }}</td>
+    <td class="p-2 border text-right text-emerald-700">Rp {{ "{:,.0f}".format(ns.glaba) }}</td>
+    <td class="p-2 border"></td>
+  </tr>
+</tfoot>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <!-- Footer shortcut (konsisten) -->
+  <footer class="bg-slate-200 text-slate-700 text-sm p-2 text-center">
+    Shortcut: <kbd class="px-1">F5</kbd> refresh, <kbd class="px-1">Ctrl</kbd> + <kbd class="px-1">P</kbd> print halaman, <a href="{{ url_for('kasir') }}" class="underline">Kembali ke Kasir</a>
+  </footer>
+
+  <!-- Script: cetak & WA -->
+  <script>
+    const fmt = n => "Rp " + (n||0).toLocaleString('id-ID');
+
+    function doFilter(){
+      const q = (document.getElementById('q').value || "").toLowerCase();
+      const rows = document.querySelectorAll("#txTable tr");
+      rows.forEach(tr=>{
+        const text = tr.innerText.toLowerCase();
+        tr.style.display = text.includes(q) ? "" : "none";
+      });
+    }
+    function resetFilter(){
+      document.getElementById('q').value = "";
+      doFilter();
+    }
+
+    function printNotaFromData(head, items){
+      const notaId = "TX-" + (head.id_hex || "").toUpperCase();
+      const total = items.reduce((a,b)=> a + (b.qty*b.harga_jual - (b.potongan||0)), 0);
+      let rows = "";
+      items.forEach(it=>{
+        const sub = it.qty*it.harga_jual - (it.potongan||0);
+        rows += `<tr>
+          <td>${it.nama}</td>
+          <td>${it.qty} x ${fmt(it.harga_jual)}</td>
+          <td class="text-right">${fmt(sub)}</td>
+        </tr>`;
+      });
+
+      const html = `
+        <html>
+          <head>
+            <title>Struk Penjualan</title>
+            <style>
+              body { font-family: monospace; font-size: 12px; }
+              h2 { text-align: center; margin: 4px 0; }
+              table { width: 100%; border-collapse: collapse; }
+              td { padding: 2px 0; }
+            </style>
+          </head>
+          <body>
+            <h2>🛒 STRUK PENJUALAN</h2>
+            <div>No: ${notaId}</div>
+            <div>${new Date(head.tanggal).toLocaleString('id-ID')}</div>
+            <hr/>
+            <table>${rows}</table>
+            <hr/>
+            <table>
+              <tr><td>Total</td><td colspan="2" class="text-right">${fmt(total)}</td></tr>
+              <tr><td>Bayar</td><td colspan="2" class="text-right">${fmt(head.bayar)}</td></tr>
+              <tr><td>Kembali</td><td colspan="2" class="text-right">${fmt(head.kembalian)}</td></tr>
+              <tr><td>Metode</td><td colspan="2" class="text-right">${head.metode_bayar}</td></tr>
+            </table>
+            <hr/>
+            <div style="text-align:center">Terima Kasih 🙏</div>
+            <script>
+              window.onload = function(){ window.print(); setTimeout(()=>window.close(), 300); }
+            <\/script>
+          </body>
+        </html>
+      `;
+      const w = window.open("", "printWin");
+      w.document.write(html);
+      w.document.close();
+    }
+
+    async function fetchDetail(id){
+      const r = await fetch(`/api/penjualan/${id}`);
+      if(!r.ok) throw new Error("Gagal ambil detail");
+      return r.json(); // { header:{id, id_hex, tanggal, metode_bayar, bayar, kembalian, pembeli_nama, no_hp}, items:[{nama, qty, harga_jual, potongan}, ...] }
+    }
+
+    async function printById(id){
+      try{
+        const data = await fetchDetail(id);
+        printNotaFromData(data.header, data.items);
+      }catch(e){
+        alert("Gagal cetak ulang: "+e.message);
+      }
+    }
+
+    function buildWaText(header, items){
+      const notaId = "TX-" + (header.id_hex || "").toUpperCase();
+      const total = items.reduce((a,b)=> a + (b.qty*b.harga_jual - (b.potongan||0)), 0);
+      let itemsTxt = "";
+      items.forEach(it=>{
+        const sub = it.qty*it.harga_jual - (it.potongan||0);
+        itemsTxt += `${it.nama} (${it.qty}x${fmt(it.harga_jual)}) = ${fmt(sub)}\n`;
+      });
+      return (
+        `🛒 *Struk Penjualan*\n` +
+        `No: ${notaId}\n` +
+        `${new Date(header.tanggal).toLocaleString('id-ID')}\n` +
+        `====================\n` +
+        itemsTxt +
+        `--------------------\n` +
+        `Total    : ${fmt(total)}\n` +
+        `Bayar    : ${fmt(header.bayar)}\n` +
+        `Kembali  : ${fmt(header.kembalian)}\n` +
+        `====================\n` +
+        `Terima Kasih 🙏\n` +
+        `- Kasir Offline`
+      );
+    }
+
+    async function waById(id, nama, no_hp){
+      try{
+        const data = await fetchDetail(id);
+        // gunakan no_hp dari parameter jika tersedia, jika tidak dari header
+        const number = (no_hp && /^62\d+$/.test(no_hp)) ? no_hp : (data.header.no_hp || "");
+        if(!/^62\d+$/.test(number)){ alert("Nomor WA tidak valid"); return; }
+        const message = buildWaText(data.header, data.items);
+
+        const r = await fetch("/api/send-wa", {
+          method:"POST",
+          headers:{"Content-Type":"application/json"},
+          body: JSON.stringify({ number, message })
+        });
+        const js = await r.json();
+        if(!r.ok){ throw new Error(js.msg||"Gagal kirim WA"); }
+        alert("Pesan WA terkirim ✅");
+      }catch(e){
+        alert("Gagal kirim WA: "+e.message);
+      }
+    }
+  </script>
+</body>
+</html>

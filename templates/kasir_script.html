@@ -1,0 +1,754 @@
+<script>
+  // ======= UTIL =======
+  const fmt = n => "Rp " + (n || 0).toLocaleString('id-ID');
+  const load = (k, d) => JSON.parse(localStorage.getItem(k) || JSON.stringify(d));
+  const save = (k, v) => localStorage.setItem(k, JSON.stringify(v));
+
+  let cart = load("cart", []); // [{barcode,nama,harga_jual,harga_beli,qty, potongan}]
+  let master = load("masterBarang", {}); // { barcode: {nama,harga_jual,harga_beli} }
+
+  function tickNow() {
+      const el = document.getElementById('now');
+      if (el) {
+          el.textContent =
+              new Date().toLocaleString('id-ID', {
+                  dateStyle: 'full',
+                  timeStyle: 'medium'
+              });
+      }
+  }
+  setInterval(tickNow, 1000);
+  tickNow();
+
+  function getNumericIdOrNull(val) {
+      // hanya pakai ID numerik; jika "local:xxxx" atau kosong -> null
+      return (/^\d+$/).test(String(val || "")) ? parseInt(val, 10) : null;
+  }
+  // ======= RENDER CART =======
+  function renderCart() {
+      const tbody = document.getElementById('cartTable');
+      tbody.innerHTML = "";
+      let total = 0;
+
+      cart.forEach((it, i) => {
+          const pot = it.potongan || 0;
+          const sub = (it.qty * it.harga_jual) - pot;
+          //  const sub = it.qty * it.harga_jual - (it.potongan||0);
+          total += sub;
+          tbody.insertAdjacentHTML('beforeend', `
+        <tr data-idx="${i}" class="odd:bg-white even:bg-slate-50">
+          <td class="p-2 border">${i+1}</td>
+          <td class="p-2 border">${it.barcode}</td>
+          <td class="p-2 border text-left">${it.nama}</td>
+          <td class="p-2 border">${it.qty}</td>
+          <td class="p-2 border">${fmt(it.harga_jual)}</td>
+        <!-- POTONGAN: klik untuk edit -->
+        <td class="p-2 border text-right col-potongan">
+          <button class="underline text-blue-600" onclick="editPotongan(${i})">${fmt(pot)}</button>
+        </td>
+          <td class="p-2 border font-semibold">${fmt(sub)}</td>
+          <td class="p-2 border">
+            <button class="text-red-600 hover:underline" onclick="removeItem(${i})">🗑️</button>
+          </td>
+        </tr>
+      `);
+      });
+      document.getElementById('totalView').textContent = fmt(total);
+      save("cart", cart);
+  }
+
+  function editPotongan(idx) {
+      const tbody = document.getElementById('cartTable');
+      if (!tbody) return;
+      const tr = tbody.querySelector(`tr[data-idx="${idx}"]`);
+      if (!tr) {
+          // fallback: render ulang lalu coba lagi sekali
+          renderCart();
+          const tr2 = tbody.querySelector(`tr[data-idx="${idx}"]`);
+          if (!tr2) return; // baris sudah tidak ada (mis. item dihapus)
+          return editPotongan(idx);
+      }
+      const td = tr.querySelector('.col-potongan');
+      if (!td) return;
+
+      const current = parseInt(cart[idx].potongan || 0, 10);
+      td.innerHTML = `<input type="number" class="w-24 border rounded px-2 py-1 text-right" id="pot-input-${idx}" value="${current}">`;
+      const inp = document.getElementById(`pot-input-${idx}`);
+      if (!inp) return;
+      inp.focus();
+      inp.select();
+
+      const commit = () => {
+          const val = parseInt(inp.value, 10);
+          cart[idx].potongan = isNaN(val) ? 0 : Math.max(0, val);
+          renderCart();
+          // kembalikan fokus ke tombol potongan pada baris yang sama (jika masih ada)
+          const trAfter = tbody.querySelector(`tr[data-idx="${idx}"]`);
+          const btn = trAfter?.querySelector('.col-potongan button');
+          if (btn) btn.focus();
+      };
+
+      inp.addEventListener('blur', commit, {
+          once: true
+      });
+      inp.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') {
+              e.preventDefault();
+              commit();
+          }
+          if (e.key === 'Escape') {
+              e.preventDefault();
+              renderCart();
+          }
+      });
+  }
+
+  function removeItem(idx) {
+      cart.splice(idx, 1);
+      renderCart();
+  }
+
+  // ======= MODAL HANDLER =======
+  function isOpen(id) {
+      return document.getElementById(id)?.classList.contains('flex');
+  }
+
+  function openModal(id) {
+      const el = document.getElementById(id);
+      el.classList.remove('hidden');
+      el.classList.add('flex');
+      if (id === 'itemModal') {
+          setTimeout(() => document.getElementById('mBarcode')?.focus(), 50);
+      }
+      if (id === 'payModal') {
+          setTimeout(() => document.getElementById('payBayar')?.focus(), 50);
+      }
+      if (id === 'custModal') {
+          setTimeout(() => document.getElementById('cNama')?.focus(), 50);
+      } // ✅ fokus nama pembeli
+  }
+
+  function closeModal(id) {
+      const el = document.getElementById(id);
+      el.classList.add('hidden');
+      el.classList.remove('flex');
+  }
+
+  function clearItemForm() {
+      document.getElementById('mBarcode').value = "";
+      document.getElementById('mNama').value = "";
+      document.getElementById('mHargaJual').value = "";
+      document.getElementById('mHargaBeli').value = "";
+      document.getElementById('mQty').value = 1;
+      document.getElementById('mBarcode').focus();
+  }
+
+  // ======= ITEM LOGIC =======
+  function prefillFromMaster(barcode) {
+      const hit = master[barcode];
+      document.getElementById('mBarcode').value = barcode;
+      if (hit) {
+          document.getElementById('mNama').value = hit.nama || "";
+          document.getElementById('mHargaJual').value = hit.harga_jual || "";
+          document.getElementById('mHargaBeli').value = hit.harga_beli || "";
+      } else {
+          document.getElementById('mNama').value = "";
+          document.getElementById('mHargaJual').value = "";
+          document.getElementById('mHargaBeli').value = "";
+      }
+      document.getElementById('mQty').value = 1;
+      document.getElementById('mQty').focus();
+      document.getElementById('mQty').select();
+  }
+
+  function commitItem() {
+      const barcode = (document.getElementById('mBarcode').value || "").trim();
+      if (!barcode) return;
+      const nama = (document.getElementById('mNama').value || "Barang");
+      const hj = parseInt(document.getElementById('mHargaJual').value || "0");
+      const hb = parseInt(document.getElementById('mHargaBeli').value || "0");
+      const qty = Math.max(1, parseInt(document.getElementById('mQty').value || "1"));
+      const potongan = 0;
+
+      const ex = cart.find(i => i.barcode === barcode && i.harga_jual === hj);
+      if (ex) {
+          ex.qty += qty;
+      } else {
+          cart.push({
+              barcode,
+              nama,
+              harga_jual: hj,
+              harga_beli: hb,
+              qty,
+              potongan
+          });
+      }
+
+      master[barcode] = {
+          nama,
+          harga_jual: hj,
+          harga_beli: hb
+      };
+      save("masterBarang", master);
+
+      renderCart();
+      clearItemForm();
+  }
+
+  function handleScan(barcode, {
+      openModalIfNew = false
+  } = {}) {
+      if (!barcode) return;
+      if (master[barcode]) {
+          const hit = master[barcode];
+          const ex = cart.find(i => i.barcode === barcode && i.harga_jual === hit.harga_jual);
+          if (ex) ex.qty += 1;
+          else cart.push({
+              barcode,
+              nama: hit.nama || "Barang",
+              harga_jual: hit.harga_jual || 0,
+              harga_beli: hit.harga_beli || 0,
+              qty: 1,
+              potongan: 0
+          });
+          renderCart();
+      } else {
+          if (openModalIfNew) {
+              openModal('itemModal');
+          }
+          prefillFromMaster(barcode);
+      }
+  }
+
+  // ===== Customers (offline-first) =====
+  function upsertPayPembeliOption(idValue, labelText, selectEl) {
+      const opt = document.createElement("option");
+      opt.value = idValue;
+      opt.text = labelText;
+      selectEl.add(opt);
+      selectEl.value = idValue;
+  }
+
+  function loadLocalCustomers() {
+      return JSON.parse(localStorage.getItem("localCustomers") || "[]");
+  }
+
+  function saveLocalCustomers(list) {
+      localStorage.setItem("localCustomers", JSON.stringify(list));
+  }
+
+  // On page load, render any locally saved customers (so they show up even before server sync)
+  (function hydrateLocalCustomersIntoSelect() {
+      const sel = document.getElementById("payPembeli");
+      const locals = loadLocalCustomers();
+      for (const c of locals) {
+          // use local temp id prefixed to avoid collision with integer server id
+          const idVal = c.server_id ? String(c.server_id) : `local:${c.temp_id}`;
+          // avoid duplicating if server rendered same id
+          if (![...sel.options].some(o => o.value === idVal)) {
+              upsertPayPembeliOption(idVal, `${c.nama} — ${c.no_hp||''}`, sel);
+          }
+      }
+  })();
+
+  function saveCustomer() {
+      const nama = document.getElementById("cNama").value.trim();
+      const no_hp = document.getElementById("cHp").value.trim();
+      const alamat = document.getElementById("cAlamat").value.trim();
+
+      if (!nama) {
+          alert("Nama wajib diisi");
+          return;
+      }
+      if (!no_hp) {
+          alert("Nomor HP wajib diisi");
+          return;
+      }
+
+      const temp_id = crypto?.randomUUID?.() || String(Date.now());
+      let locals = JSON.parse(localStorage.getItem("localCustomers") || "[]");
+      const record = {
+          temp_id,
+          server_id: null,
+          nama,
+          no_hp,
+          alamat
+      };
+      locals.push(record);
+      localStorage.setItem("localCustomers", JSON.stringify(locals));
+
+      // tambahkan ke dropdown & pilihkan
+      const sel = document.getElementById("payPembeli");
+      const opt = document.createElement("option");
+      opt.value = `local:${temp_id}`;
+      opt.text = `${nama} — ${no_hp}`;
+      sel.add(opt);
+      sel.value = opt.value;
+
+      // tutup modal & bersihkan
+      closeModal('custModal');
+      document.getElementById("cNama").value = "";
+      document.getElementById("cHp").value = "";
+      document.getElementById("cAlamat").value = "";
+
+      focusPayAmount();
+
+      // sync ke server jika online -> ganti value option menjadi ID server
+      if (navigator.onLine) {
+          fetch("/api/sync-pembeli", {
+                  method: "POST",
+                  headers: {
+                      "Content-Type": "application/json"
+                  },
+                  body: JSON.stringify({
+                      nama,
+                      no_hp,
+                      alamat
+                  })
+              })
+              .then(r => r.json())
+              .then(js => {
+                  if (js.status === "ok" && js.id) {
+                      // update local storage
+                      locals = JSON.parse(localStorage.getItem("localCustomers") || "[]");
+                      const idx = locals.findIndex(x => x.temp_id === temp_id);
+                      if (idx !== -1) {
+                          locals[idx].server_id = js.id;
+                          localStorage.setItem("localCustomers", JSON.stringify(locals));
+                      }
+                      // ganti value option di dropdown
+                      for (const o of sel.options) {
+                          if (o.value === `local:${temp_id}`) {
+                              o.value = String(js.id);
+                              break;
+                          }
+                      }
+                  }
+              })
+              .catch(err => console.error("Sync pembeli gagal:", err));
+      }
+  }
+
+
+  // pasang shortcut enter/esc khusus modal pembeli (tidak men-trigger yang lain)
+  (function wireCustomerModalKeys() {
+      const cust = document.getElementById('custModal');
+      if (!cust) return;
+
+      cust.addEventListener('keydown', (e) => {
+          if (!isOpen('custModal')) return; // hanya saat modal pembeli terbuka
+
+          if (e.key === 'Enter') {
+              e.preventDefault();
+              e.stopPropagation(); // ✅ cegah tembus ke listener global
+              saveCustomer();
+          }
+          if (e.key === 'Escape') {
+              e.preventDefault();
+              e.stopPropagation(); // ✅ cegah tembus ke listener global
+              closeModal('custModal');
+              focusPayAmount();
+          }
+      });
+  })();
+  // ======= BAYAR =======
+ async function openPaymentModal() {
+      if (cart.length === 0) {
+          alert("Keranjang kosong.");
+          return;
+      }
+
+      await refreshPembeliOptions();
+
+      const total = cart.reduce((a, b) => a + b.qty * b.harga_jual - (b.potongan || 0), 0);
+      document.getElementById('payTotal').textContent = fmt(total);
+
+      const sel = document.getElementById('payPembeli');
+      // jika belum ada pilihan, pilih opsi pertama yang punya value (bukan placeholder kosong)
+      if (!sel.value || sel.value === "") {
+          const firstReal = [...sel.options].find(o => (o.value ?? "") !== "");
+          if (firstReal) sel.value = firstReal.value;
+      }
+      document.getElementById('payBayar').value = "";
+      document.getElementById('payKembalian').textContent = fmt(0);
+      openModal('payModal');
+
+      const bayarEl = document.getElementById('payBayar');
+      const kembalianEl = document.getElementById('payKembalian');
+
+
+      // kembalian otomatis
+      const totalNow = total; // lock total untuk handler ini
+      bayarEl.oninput = () => {
+          const bayar = parseInt(bayarEl.value || "0", 10);
+          const k = bayar - totalNow;
+          kembalianEl.textContent = fmt(k);
+          kembalianEl.className = "font-semibold " + (k < 0 ? "text-red-600" : "text-emerald-600");
+      };
+
+      // ENTER di kolom bayar -> langsung selesai
+      bayarEl.onkeydown = (e) => {
+          if (e.key === 'Enter') {
+              e.preventDefault();
+              finishPayment();
+          }
+      };
+
+      // jaga-jaga: ENTER di mana pun dalam payModal juga memicu bayar
+      const payModal = document.getElementById('payModal');
+      const handleEnter = (e) => {
+          if (e.key === 'Enter') {
+              e.preventDefault();
+              finishPayment();
+          }
+      };
+      payModal.addEventListener('keydown', handleEnter, {
+          once: true
+      });
+  }
+
+  async function sendWa(pembeliId, tx) {
+      try {
+          // Ambil nomor HP dari label option (setelah " — ")
+          const sel = document.getElementById("payPembeli");
+          const opt = [...sel.options].find(o => o.value == pembeliId);
+          if (!opt) return;
+
+          let no_hp = "";
+          if (opt.text.includes("—")) {
+              no_hp = opt.text.split("—")[1].trim();
+          }
+          // validasi basic
+          if (!/^62\d+$/.test(no_hp)) return;
+
+          // Buat pesan
+          const notaId = "TX-" + (tx.client_tx_id || "").slice(0, 8).toUpperCase();
+          const total = tx.items.reduce((a, b) => a + b.qty * b.harga_jual - (b.potongan || 0), 0);
+
+          // susun daftar item
+          let itemsTxt = "";
+          tx.items.forEach(it => {
+              const sub = (it.qty * it.harga_jual) - (it.potongan || 0);
+              itemsTxt += `${it.nama} (${it.qty}x${fmt(it.harga_jual)}) = ${fmt(sub)}\n`;
+          });
+
+          const msg =
+              `🛒 *Struk Penjualan*\n` +
+              `No: ${notaId}\n` +
+              `${new Date(tx.tanggal_client).toLocaleString('id-ID')}\n` +
+              `====================\n` +
+              itemsTxt +
+              `--------------------\n` +
+              `Total    : ${fmt(total)}\n` +
+              `Bayar    : ${fmt(tx.bayar)}\n` +
+              `Kembali  : ${fmt(tx.kembalian)}\n` +
+              `====================\n` +
+              `Terima Kasih 🙏\n` +
+              `- Kasir Offline`;
+
+          // Panggil backend proxy (same-origin)
+          const res = await fetch("/api/send-wa", {
+              method: "POST",
+              headers: {
+                  "Content-Type": "application/json"
+              },
+              body: JSON.stringify({
+                  number: no_hp,
+                  message: msg
+              })
+          });
+          const js = await res.json();
+          console.log("WA result:", js);
+      } catch (err) {
+          console.error("Gagal kirim WA:", err);
+      }
+  }
+
+
+  function printNota(tx) {
+      const total = tx.items.reduce((a, b) => a + b.qty * b.harga_jual - (b.potongan || 0), 0);
+      let rows = "";
+      tx.items.forEach(it => {
+          const sub = it.qty * it.harga_jual - (it.potongan || 0);
+          rows += `<tr>
+        <td>${it.nama}</td>
+        <td>${it.qty} x ${fmt(it.harga_jual)}</td>
+        <td class="text-right">${fmt(sub)}</td>
+      </tr>`;
+      });
+
+      // Nomor transaksi → ambil dari client_tx_id (potong biar singkat)
+      const notaId = "TX-" + (tx.client_tx_id || "").slice(0, 8).toUpperCase();
+
+      const html = `
+      <html>
+        <head>
+          <title>Struk Penjualan</title>
+          <style>
+            body { font-family: monospace; font-size: 12px; }
+            h2 { text-align: center; margin: 4px 0; }
+            table { width: 100%; border-collapse: collapse; }
+            td { padding: 2px 0; }
+            .total { font-weight: bold; border-top:1px dashed #000; }
+          </style>
+        </head>
+        <body>
+          <h2>🛒 STRUK PENJUALAN</h2>
+          <div>No: ${notaId}</div>
+          <div>${new Date(tx.tanggal_client).toLocaleString('id-ID')}</div>
+          <hr/>
+          <table>${rows}</table>
+          <hr/>
+          <table>
+            <tr><td>Total</td><td colspan="2" class="text-right">${fmt(total)}</td></tr>
+            <tr><td>Bayar</td><td colspan="2" class="text-right">${fmt(tx.bayar)}</td></tr>
+            <tr><td>Kembali</td><td colspan="2" class="text-right">${fmt(tx.kembalian)}</td></tr>
+            <tr><td>Metode</td><td colspan="2" class="text-right">${tx.metode_bayar}</td></tr>
+          </table>
+          <hr/>
+          <div style="text-align:center">Terima Kasih 🙏</div>
+          <script>
+            window.onload = function(){
+              window.print();
+              setTimeout(()=>window.close(), 300);
+            }
+          <\/script>
+        </body>
+      </html>
+    `;
+
+      const w = window.open("", "printWin");
+      w.document.write(html);
+      w.document.close();
+  }
+
+  function focusPayAmount() {
+      // fokuskan ke input nominal bayar jika payModal masih terbuka
+      const el = document.getElementById('payBayar');
+      if (document.getElementById('payModal')?.classList.contains('flex') && el) {
+          setTimeout(() => el.focus(), 30);
+      }
+  }
+
+  function finishPayment() {
+      const total = cart.reduce((a, b) => a + b.qty * b.harga_jual - (b.potongan || 0), 0);
+      const bayar = parseInt(document.getElementById('payBayar').value || "0", 10);
+      const metode = document.getElementById('payMetode').value;
+      const selVal = document.getElementById('payPembeli').value;
+      const pembeli_id = getNumericIdOrNull(selVal); // ✅ aman (null kalau "local:...")
+
+      const kembalian = bayar - total;
+      const tx = {
+          client_tx_id: (crypto?.randomUUID?.() || String(Date.now())),
+          tanggal_client: new Date().toISOString(),
+          metode_bayar: metode,
+          bayar,
+          kembalian,
+          pembeli: pembeli_id, // null atau integer
+          items: cart
+      };
+
+      // simpan transaksi offline
+      let allTx = load("transactions", []);
+      allTx.push(tx);
+      save("transactions", allTx);
+
+      // reset keranjang
+      cart = [];
+      renderCart();
+      closeModal('payModal');
+      alert("✅ Transaksi tersimpan offline. Siap disinkronkan saat online.");
+
+      // kirim WA jika ada pembeli
+      if (tx.pembeli) {
+          sendWa(tx.pembeli, tx);
+      }
+      // cetak struk
+      printNota(tx);
+      // sync otomatis jika online
+      if (navigator.onLine) {
+          syncOfflineData();
+      }
+  }
+
+  function rebuildPembeliSelect(serverList) {
+      const sel = document.getElementById("payPembeli");
+      if (!sel) return;
+
+      // simpan value terpilih agar tidak hilang
+      const prev = sel.value;
+
+      // ambil pembeli lokal (yang mungkin belum tersync)
+      const locals = loadLocalCustomers(); // [{temp_id, server_id, nama, no_hp, ...}]
+
+      // gabungkan: server (id numerik) + lokal (id local:temp atau server_id jika sudah sync)
+      // gunakan Map agar tidak dobel (key = id numerik untuk server, "local:temp_id" untuk lokal tanpa server_id)
+      const map = new Map();
+
+      // server
+      (serverList || []).forEach(p => {
+          const id = String(p.id);
+          map.set(id, {
+              value: id,
+              label: `${p.nama} — ${p.no_hp||""}`.trim()
+          });
+      });
+
+      // lokal
+      locals.forEach(c => {
+          if (c.server_id) {
+              const id = String(c.server_id);
+              // bila server juga sudah kirim, map.set akan overwrite dengan label terbaru (OK)
+              map.set(id, {
+                  value: id,
+                  label: `${c.nama} — ${c.no_hp||""}`.trim()
+              });
+          } else {
+              const id = `local:${c.temp_id}`;
+              map.set(id, {
+                  value: id,
+                  label: `${c.nama} — ${c.no_hp||""}`.trim()
+              });
+          }
+      });
+
+      // kosongkan dan render ulang
+      sel.innerHTML = "";
+      // placeholder
+      sel.insertAdjacentHTML("beforeend", `<option value="">(Tanpa pembeli)</option>`);
+      // urutkan nama biar rapi
+      const arr = Array.from(map.values()).sort((a, b) => a.label.localeCompare(b.label, 'id'));
+      arr.forEach(o => {
+          const opt = document.createElement("option");
+          opt.value = o.value;
+          opt.text = o.label;
+          sel.add(opt);
+      });
+
+      // restore pilihan sebelumnya bila masih ada, kalau tidak pilih opsi pertama yang valid
+      if (prev && [...sel.options].some(o => o.value === prev)) {
+          sel.value = prev;
+      } else {
+          const firstReal = [...sel.options].find(o => (o.value ?? "") !== "");
+          if (firstReal) sel.value = firstReal.value;
+      }
+  }
+
+  async function refreshPembeliOptions() {
+      try {
+          const res = await fetch("/api/pembeli");
+          if (!res.ok) throw new Error("HTTP " + res.status);
+          const serverList = await res.json(); // [{id,nama,no_hp}]
+          rebuildPembeliSelect(serverList);
+      } catch (err) {
+          console.warn("Gagal load pembeli dari server, pakai lokal saja:", err);
+          rebuildPembeliSelect([]); // tetap render dari lokal
+      }
+  }
+
+  //  function finishPayment(){
+  //    const total = cart.reduce((a,b)=>a + b.qty*b.harga_jual - (b.potongan||0), 0);
+  //    const bayar = parseInt(document.getElementById('payBayar').value||"0");
+  //    const metode = document.getElementById('payMetode').value;
+  //    const pembeli_id = document.getElementById('payPembeli').value || null;
+  //    const kembalian = bayar - total;
+
+  //    let tx = load("transactions", []);
+  //    tx.push({
+  //      client_tx_id: (crypto?.randomUUID?.() || String(Date.now())),
+  //      tanggal_client: new Date().toISOString(),
+  //      metode_bayar: metode,
+  //      bayar, kembalian,
+  //      pembeli: pembeli_id ? parseInt(pembeli_id) : null,
+  //      items: cart
+  //    });
+  //    save("transactions", tx);
+
+  //    cart = [];
+  //    renderCart();
+  //    closeModal('payModal');
+  //    alert("✅ Transaksi tersimpan offline. Siap disinkronkan saat online.");
+
+  // TODO: panggil fungsi sync otomatis kalau online
+  //    if(navigator.onLine){
+  //      syncOfflineData();
+  //    }
+  //  }
+
+  // ======= SYNC =======
+  async function syncOfflineData() {
+      let tx = load("transactions", []);
+      if (tx.length === 0) return;
+      for (const t of tx) {
+          try {
+              const res = await fetch("/api/sync-transaksi", {
+                  method: "POST",
+                  headers: {
+                      "Content-Type": "application/json"
+                  },
+                  body: JSON.stringify(t)
+              });
+              const js = await res.json();
+              if (js.status === "ok" || js.status === "duplicate") {
+                  tx = tx.filter(x => x.client_tx_id !== t.client_tx_id);
+                  save("transactions", tx);
+              }
+          } catch (e) {
+              console.error("Gagal sync:", e);
+          }
+      }
+  }
+
+  window.addEventListener('online', syncOfflineData);
+
+  // ======= SHORTCUTS =======
+  document.addEventListener('keydown', (e) => {
+      if (e.key === '+') {
+          e.preventDefault();
+          openModal('itemModal');
+      }
+      if (e.key === 'F2') {
+          e.preventDefault();
+          openPaymentModal();
+      }
+      if (e.key === 'Escape') {
+          closeModal('itemModal');
+          closeModal('payModal');
+          closeModal('custModal'); // ✅
+      }
+
+      if (e.key === 'Enter' && document.activeElement.id === 'quickBarcode') {
+          e.preventDefault();
+          const bc = document.getElementById('quickBarcode').value.trim();
+          document.getElementById('quickBarcode').value = "";
+          handleScan(bc, {
+              openModalIfNew: true
+          });
+      }
+
+      if (e.key === 'Enter' && isOpen('payModal') && !isOpen('custModal')) { // ✅ abaikan kalau custModal terbuka
+          if (document.activeElement.id !== 'payBayar') {
+              e.preventDefault();
+              finishPayment();
+          }
+      }
+
+      if (e.key === 'Enter' && document.getElementById('itemModal').classList.contains('flex')) {
+          if (document.activeElement.id === 'mBarcode') {
+              e.preventDefault();
+              const bc = document.getElementById('mBarcode').value.trim();
+              if (!bc) return;
+              prefillFromMaster(bc);
+          } else {
+              e.preventDefault();
+              commitItem();
+          }
+      }
+  });
+
+  // ======= INIT =======
+  document.getElementById('btnTambah').onclick = () => openModal('itemModal');
+  document.getElementById('btnBayar').onclick = openPaymentModal;
+  renderCart();
+  syncOfflineData();
+</script>

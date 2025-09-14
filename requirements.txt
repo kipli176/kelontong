@@ -1,0 +1,8 @@
+#flask==3.0.3
+#psycopg[binary,pool]==3.2.1
+#python-dotenv==1.0.1
+requests==2.32.3
+Flask==2.3.3
+psycopg2-binary==2.9.9
+openpyxl==3.1.5    # untuk XLSX
+reportlab==4.2.2   # untuk PDF sederhana

@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <title>Laporan — Kasir</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="h-screen w-screen bg-slate-100 flex flex-col">
+
+  <!-- Header Navigasi -->
+  <header class="bg-blue-600 text-white p-4 flex justify-between items-center">
+    <div class="text-xl font-bold">📊 Laporan</div>
+    <nav class="flex gap-4 text-sm">
+      <a href="{{ url_for('kasir') }}" class="hover:underline">🏠 Kasir</a>
+      <a href="{{ url_for('penjualan_hari_ini') }}" class="hover:underline">📄 Penjualan Hari Ini</a>
+      <a href="{{ url_for('laporan') }}" class="hover:underline font-semibold underline">📊 Laporan</a>
+    </nav>
+  </header>
+
+  <!-- Main -->
+  <main class="flex-1 p-3 flex flex-col gap-3 overflow-hidden">
+
+    <!-- Filter Bar -->
+    <section class="bg-white rounded shadow-sm p-3 flex flex-wrap items-center gap-2">
+      <div class="text-sm text-slate-600 mr-2">Rentang:</div>
+      <input id="start" type="date" value="{{ start }}" class="border rounded px-2 py-1">
+      <span>—</span>
+      <input id="end" type="date" value="{{ end }}" class="border rounded px-2 py-1">
+      <button id="btnApply" class="px-3 py-2 bg-blue-600 text-white rounded text-sm">Terapkan</button>
+
+      <a id="btnExport" href="#" class="ml-auto px-3 py-2 bg-emerald-600 text-white rounded text-sm">⬇️ Export Excel</a>
+    </section>
+
+    <!-- Tabs -->
+    <section class="bg-white rounded shadow-sm p-3 flex flex-col gap-3 overflow-hidden">
+      <div class="flex gap-2">
+        <button id="tabHarian" class="px-3 py-2 rounded bg-slate-200">Harian</button>
+        <button id="tabBarang" class="px-3 py-2 rounded">Per Barang</button>
+        <div class="ml-auto text-sm text-slate-500">Data otomatis mengikuti rentang tanggal</div>
+      </div>
+
+      <!-- HARlAN -->
+      <div id="paneHarian" class="flex-1 flex flex-col gap-2">
+        <div class="border rounded overflow-auto">
+          <table class="w-full text-sm">
+            <thead class="bg-slate-100 sticky top-0">
+              <tr>
+                <th class="p-2 border">Tanggal</th>
+                <th class="p-2 border text-right">Jumlah Transaksi</th>
+                <th class="p-2 border text-right">Total Penjualan</th>
+                <th class="p-2 border text-right">Total Laba</th>
+              </tr>
+            </thead>
+            <tbody id="tbHarian"></tbody>
+            <tfoot class="bg-slate-200 font-semibold">
+              <tr>
+                <td class="p-2 border text-right">TOTAL</td>
+                <td class="p-2 border text-right" id="h_jumlah">0</td>
+                <td class="p-2 border text-right" id="h_total">Rp 0</td>
+                <td class="p-2 border text-right" id="h_laba">Rp 0</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+
+      <!-- PER BARANG -->
+      <div id="paneBarang" class="hidden flex-1 flex flex-col gap-2">
+        <div class="flex items-center gap-2">
+          <input id="qBarang" placeholder="🔎 Cari barcode / nama barang"
+                 class="border rounded px-3 py-2 text-sm flex-1">
+          <button id="btnCariBarang" class="px-3 py-2 bg-blue-600 text-white rounded text-sm">Cari</button>
+          <button id="btnResetBarang" class="px-3 py-2 bg-slate-200 rounded text-sm">Reset</button>
+        </div>
+        <div class="border rounded overflow-auto">
+          <table class="w-full text-sm">
+            <thead class="bg-slate-100 sticky top-0">
+              <tr>
+                <th class="p-2 border">Barcode</th>
+                <th class="p-2 border">Nama</th>
+                <th class="p-2 border text-right">Qty</th>
+                <th class="p-2 border text-right">Omzet</th>
+                <th class="p-2 border text-right">Laba</th>
+              </tr>
+            </thead>
+            <tbody id="tbBarang"></tbody>
+            <tfoot class="bg-slate-200 font-semibold">
+              <tr>
+                <td class="p-2 border text-right" colspan="3">TOTAL</td>
+                <td class="p-2 border text-right" id="b_omzet">Rp 0</td>
+                <td class="p-2 border text-right" id="b_laba">Rp 0</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+
+    </section>
+  </main>
+
+  <!-- Footer -->
+  <footer class="bg-slate-200 text-slate-700 text-sm p-2 text-center">
+    Shortcut: <kbd class="px-1">F5</kbd> refresh • <a href="{{ url_for('kasir') }}" class="underline">Kembali ke Kasir</a>
+  </footer>
+
+  <script>
+    const fmt = n => "Rp " + (n||0).toLocaleString('id-ID');
+
+    // Tabs
+    const tabH = document.getElementById('tabHarian');
+    const tabB = document.getElementById('tabBarang');
+    const paneH = document.getElementById('paneHarian');
+    const paneB = document.getElementById('paneBarang');
+    function activate(tab){
+      if(tab==='harian'){ paneH.classList.remove('hidden'); paneB.classList.add('hidden'); tabH.classList.add('bg-slate-200'); tabB.classList.remove('bg-slate-200'); }
+      else { paneB.classList.remove('hidden'); paneH.classList.add('hidden'); tabB.classList.add('bg-slate-200'); tabH.classList.remove('bg-slate-200'); }
+    }
+    tabH.onclick = ()=>activate('harian');
+    tabB.onclick = ()=>activate('barang');
+
+    // Load data
+    async function loadHarian(){
+      const start = document.getElementById('start').value;
+      const end   = document.getElementById('end').value;
+      const r = await fetch(`/api/laporan/harian?start=${start}&end=${end}`);
+      const js = await r.json();
+
+      const tb = document.getElementById('tbHarian');
+      tb.innerHTML = "";
+      let totJumlah = 0;
+      js.rows.forEach(row=>{
+        totJumlah += (row.jumlah||0);
+        tb.insertAdjacentHTML('beforeend', `
+          <tr class="odd:bg-white even:bg-slate-50">
+            <td class="p-2 border">${row.tgl}</td>
+            <td class="p-2 border text-right">${row.jumlah}</td>
+            <td class="p-2 border text-right">${fmt(row.total)}</td>
+            <td class="p-2 border text-right">${fmt(row.laba)}</td>
+          </tr>
+        `);
+      });
+      document.getElementById('h_jumlah').textContent = totJumlah.toLocaleString('id-ID');
+      document.getElementById('h_total').textContent  = fmt(js.gtotal||0);
+      document.getElementById('h_laba').textContent   = fmt(js.glaba||0);
+
+      // set export link
+      document.getElementById('btnExport').href = `/laporan/export/xlsx?start=${start}&end=${end}`;
+    }
+
+    async function loadPerBarang(q=""){
+      const start = document.getElementById('start').value;
+      const end   = document.getElementById('end').value;
+      const r = await fetch(`/api/laporan/per-barang?start=${start}&end=${end}&q=${encodeURIComponent(q)}`);
+      const js = await r.json();
+
+      const tb = document.getElementById('tbBarang');
+      tb.innerHTML = "";
+      let omzet=0, laba=0;
+      js.rows.forEach(row=>{
+        omzet += (row.omzet||0);
+        laba  += (row.laba||0);
+        tb.insertAdjacentHTML('beforeend', `
+          <tr class="odd:bg-white even:bg-slate-50">
+            <td class="p-2 border">${row.barcode||""}</td>
+            <td class="p-2 border">${row.nama||""}</td>
+            <td class="p-2 border text-right">${(row.qty||0).toLocaleString('id-ID')}</td>
+            <td class="p-2 border text-right">${fmt(row.omzet)}</td>
+            <td class="p-2 border text-right">${fmt(row.laba)}</td>
+          </tr>
+        `);
+      });
+      document.getElementById('b_omzet').textContent = fmt(omzet);
+      document.getElementById('b_laba').textContent  = fmt(laba);
+    }
+
+    // Apply date & search
+    document.getElementById('btnApply').onclick = ()=>{ loadHarian(); loadPerBarang(document.getElementById('qBarang').value||""); };
+    document.getElementById('btnCariBarang').onclick = ()=> loadPerBarang(document.getElementById('qBarang').value||"");
+    document.getElementById('btnResetBarang').onclick = ()=>{ document.getElementById('qBarang').value=""; loadPerBarang(""); };
+
+    // Init
+    (async function init(){
+      activate('harian');
+      await loadHarian();
+      await loadPerBarang("");
+    })();
+  </script>
+</body>
+</html>
