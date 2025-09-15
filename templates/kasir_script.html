@@ -36,22 +36,27 @@
             //  const sub = it.qty * it.harga_jual - (it.potongan||0);
             total += sub;
             tbody.insertAdjacentHTML('beforeend', `
-        <tr data-idx="${i}" class="odd:bg-white even:bg-slate-50">
-          <td class="p-2 border">${i + 1}</td>
-          <td class="p-2 border">${it.barcode}</td>
-          <td class="p-2 border text-left">${it.nama}</td>
-          <td class="p-2 border">${it.qty}</td>
-          <td class="p-2 border">${fmt(it.harga_jual)}</td>
-        <!-- POTONGAN: klik untuk edit -->
-        <td class="p-2 border text-right col-potongan">
-          <button class="underline text-blue-600" onclick="editPotongan(${i})">${fmt(pot)}</button>
-        </td>
-          <td class="p-2 border font-semibold">${fmt(sub)}</td>
-          <td class="p-2 border">
-            <button class="text-red-600 hover:underline" onclick="removeItem(${i})">🗑️</button>
-          </td>
-        </tr>
-      `);
+  <tr data-idx="${i}" class="odd:bg-white even:bg-slate-50">
+    <td class="p-2 border">${i + 1}</td>
+    <td class="p-2 border">${it.barcode}</td>
+    <td class="p-2 border text-left">${it.nama}</td>
+    <!-- QTY: klik untuk edit -->
+    <td class="p-2 border text-center col-qty">
+      <button class="underline text-blue-600" onclick="editQty(${i})">${it.qty}</button>
+    </td>
+    <td class="p-2 border">${fmt(it.harga_jual)}</td>
+    <!-- POTONGAN -->
+    <td class="p-2 border text-right col-potongan">
+      <button class="underline text-blue-600" onclick="editPotongan(${i})">${fmt(pot)}</button>
+    </td>
+    <td class="p-2 border font-semibold">${fmt(sub)}</td>
+    <td class="p-2 border">
+      <button class="text-red-600 hover:underline" onclick="removeItem(${i})">🗑️</button>
+    </td>
+  </tr>
+`);
+
+
         });
         document.getElementById('totalView').textContent = fmt(total);
         save("cart", cart);
@@ -102,19 +107,187 @@
             }
         });
     }
+function editQty(idx) {
+  const tbody = document.getElementById('cartTable');
+  if (!tbody) return;
+  const tr = tbody.querySelector(`tr[data-idx="${idx}"]`);
+  if (!tr) return;
+
+  const td = tr.querySelector('.col-qty');
+  if (!td) return;
+
+  const current = parseInt(cart[idx].qty || 0, 10);
+  td.innerHTML = `<input type="number" min="1" class="w-20 border rounded px-2 py-1 text-right" 
+                  id="qty-input-${idx}" value="${current}">`;
+  const inp = document.getElementById(`qty-input-${idx}`);
+  inp.focus();
+  inp.select();
+
+  const commit = () => {
+    let val = parseInt(inp.value, 10);
+    if (isNaN(val) || val <= 0) val = 1;
+    cart[idx].qty = val;
+    renderCart();
+
+    // balikin fokus ke tombol qty
+    const trAfter = tbody.querySelector(`tr[data-idx="${idx}"]`);
+    const btn = trAfter?.querySelector('.col-qty button');
+    if (btn) btn.focus();
+  };
+
+  inp.addEventListener('blur', commit, { once: true });
+  inp.addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      commit();
+    }
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      renderCart();
+    }
+  });
+}
 
     function removeItem(idx) {
         cart.splice(idx, 1);
         renderCart();
     }
 
- 
+
+async function preloadBarang() {
+  try {
+    const res = await fetch("/api/all-barang");
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const list = await res.json(); // [{barcode,nama,harga_jual,harga_beli}, ...]
+
+    const master = {};
+    for (const b of list) {
+      master[b.barcode] = {
+        nama: b.nama,
+        harga_jual: b.harga_jual,
+        harga_beli: b.harga_beli
+      };
+    }
+    save("masterBarang", master);
+    console.log("✅ Master barang terisi:", Object.keys(master).length);
+  } catch (err) {
+    console.error("Gagal preload barang:", err);
+  }
+}
+
+window.addEventListener("load", preloadBarang);
+
+function suggestBarang(query) {
+  query = (query || "").toLowerCase();
+  const master = load("masterBarang", {});
+  return Object.entries(master)
+    .map(([barcode, b]) => ({ barcode, ...b }))
+    .filter(b =>
+      b.barcode.toLowerCase().includes(query) ||
+      (b.nama || "").toLowerCase().includes(query)
+    )
+    .slice(0, 10); // batasi 10 hasil
+}
+
+// render dropdown suggestion
+function showSuggestions(inputEl, results) {
+  const box = document.getElementById(inputEl.id + "-suggestions");
+  if (!box) return;
+  
+  if (!results.length) {
+    box.classList.add("hidden");
+    return;
+  }
+
+  box.innerHTML = "";
+  results.forEach(item => {
+    const opt = document.createElement("div");
+    opt.className = "px-2 py-1 hover:bg-blue-100 cursor-pointer text-sm";
+    opt.textContent = `${item.barcode} — ${item.nama}`;
+    opt.onclick = () => {
+      inputEl.value = item.barcode;
+      box.classList.add("hidden");
+
+      if (inputEl.id === "quickBarcode") {
+        // 🔧 Alih-alih langsung handleScan,
+        // buka modal itemModal dan isi form
+        openModal("itemModal");
+        prefillFromMaster(item.barcode);
+      }
+      if (inputEl.id === "mBarcode") {
+        prefillFromMaster(item.barcode);
+      }
+    };
+    box.appendChild(opt);
+  });
+
+  box.classList.remove("hidden");
+} 
+
+
+
+document.getElementById("quickBarcode")?.addEventListener("input", e => {
+  const q = e.target.value.trim();
+  if (q.length < 2) return; // minimal 2 huruf
+  const hasil = suggestBarang(q);
+  showSuggestions(e.target, hasil);
+});
+
+document.getElementById("mBarcode")?.addEventListener("input", e => {
+  const q = e.target.value.trim();
+  if (q.length < 2) return;
+  const hasil = suggestBarang(q);
+  showSuggestions(e.target, hasil);
+});
+
+function enableKeyboardNav(inputEl) {
+  let selectedIndex = -1;
+
+  inputEl.addEventListener("keydown", e => {
+    const box = document.getElementById(inputEl.id + "-suggestions");
+    if (!box || box.classList.contains("hidden")) return;
+
+    const options = box.querySelectorAll("div");
+    if (!options.length) return;
+
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      selectedIndex = (selectedIndex + 1) % options.length;
+    }
+    if (e.key === "ArrowUp") {
+      e.preventDefault();
+      selectedIndex = (selectedIndex - 1 + options.length) % options.length;
+    }
+    if (e.key === "Enter") {
+      e.preventDefault();
+      if (selectedIndex >= 0 && selectedIndex < options.length) {
+        options[selectedIndex].click();
+        selectedIndex = -1;
+      }
+    }
+
+    // highlight pilihan
+    options.forEach((opt, i) => {
+      opt.classList.toggle("bg-blue-200", i === selectedIndex);
+    });
+  });
+
+  // reset index kalau user ketik ulang
+  inputEl.addEventListener("input", () => {
+    selectedIndex = -1;
+  });
+}
+
+// pasang di kedua input
+enableKeyboardNav(document.getElementById("quickBarcode"));
+enableKeyboardNav(document.getElementById("mBarcode"));
+
     // ======= PRINTING =======
     function generateNota(head, items, toko) {
   const total = items.reduce((a,b)=> a + (b.qty*b.harga_jual - (b.potongan||0)), 0);
 
   // gunakan client_tx_id → ambil 8 digit terakhir
-  const notaId = "TX-" + ((head.client_tx_id || "").slice(-8).toUpperCase());
+  const notaId = "TX-" + ((head.client_tx_id || "").slice(0,8).toUpperCase());
 
   // baris item teks
   const textLines = items.map(it => {
@@ -838,14 +1011,23 @@ function printNota(trx, toko) {
             closeModal('custModal'); // ✅
         }
 
-        if (e.key === 'Enter' && document.activeElement.id === 'quickBarcode') {
-            e.preventDefault();
-            const bc = document.getElementById('quickBarcode').value.trim();
-            document.getElementById('quickBarcode').value = "";
-            handleScan(bc, {
-                openModalIfNew: true
-            });
-        }
+        
+  if (e.key === 'Enter' && document.activeElement.id === 'quickBarcode') {
+      e.preventDefault();
+      const bc = document.getElementById('quickBarcode').value.trim();
+      if (!bc) return;
+      document.getElementById('quickBarcode').value = "";
+
+      const master = load("masterBarang", {});
+      if (master[bc]) {
+        // langsung masuk cart
+        handleScan(bc);
+      } else {
+        // buka modal untuk input manual
+        openModal("itemModal");
+        prefillFromMaster(bc);
+      }
+  }
 
         if (e.key === 'Enter' && isOpen('payModal') && !isOpen('custModal')) { // ✅ abaikan kalau custModal terbuka
             if (document.activeElement.id !== 'payBayar') {

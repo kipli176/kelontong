@@ -124,7 +124,7 @@ function generateNota(head, items, toko) {
   );
 
   // kode TX pakai client_tx_id → ambil 8 digit terakhir
-  const notaId = "TX-" + ((head.client_tx_id || "").slice(-8).toUpperCase());
+  const notaId = "TX-" + ((head.client_tx_id || "").slice(0,8).toUpperCase());
 
   // pakai tanggal dari head.tanggal atau head.tanggal_client
   const tanggalStr = new Date(head.tanggal || head.tanggal_client || Date.now())

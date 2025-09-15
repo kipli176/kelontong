@@ -25,11 +25,22 @@
     <!-- Left: list belanja -->
     <section class="flex-1 bg-white rounded shadow-sm p-3 flex flex-col overflow-hidden">
       <div class="flex items-center gap-2 mb-2">
-        <button id="btnTambah" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded text-sm"
+        <button id="btnTambah"
+          class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded text-sm"
           title="Shortcut: +">➕ Tambah ( + )</button>
-        <input id="quickBarcode" placeholder="🔍 Scan / ketik barcode lalu Enter"
-          class="flex-1 border rounded px-3 py-2 text-sm" />
+
+        <div class="flex-1 relative">
+          <input id="quickBarcode"
+            placeholder="🔍 Scan / ketik barcode lalu Enter"
+            class="w-full border rounded px-3 py-2 text-sm" />
+
+          <!-- kotak suggestion -->
+          <div id="quickBarcode-suggestions"
+            class="absolute left-0 right-0 bg-white border rounded shadow max-h-48 overflow-auto hidden z-50">
+          </div>
+        </div>
       </div>
+
 
       <div class="overflow-auto flex-1 border rounded">
         <table class="w-full text-sm">
@@ -73,6 +84,9 @@
         <label class="col-span-2">
           <span class="text-sm text-slate-600">Scan / Barcode</span>
           <input id="mBarcode" class="w-full border rounded px-3 py-2" placeholder="Scan di sini lalu Enter">
+          <div id="mBarcode-suggestions"
+            class="left-0 right-0 bg-white border rounded shadow max-h-48 overflow-auto hidden z-50">
+          </div>
         </label>
 
         <label class="col-span-2">

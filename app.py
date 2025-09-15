@@ -24,10 +24,10 @@ app = Flask(__name__)
 app.secret_key = "ganti_dengan_secret_random"
 
 DB_CONFIG = {
-    # "host": "192.168.1.17",
-    # "port": 15432,
-    "host": "postgres",
-    "port": 5432,
+    "host": "192.168.1.17",
+    "port": 15432,
+    # "host": "postgres",
+    # "port": 5432,
     "dbname": "iin",
     "user": "kipli_user",
     "password": "kipli_password"
@@ -669,6 +669,33 @@ def api_penjualan_detail(pid):
         return jsonify({"header": header, "items": items})
     finally:
         cur.close()
+
+@app.route("/api/all-barang")
+def api_all_barang():
+    """
+    Ambil semua barang yang pernah terbeli (cache master barang).
+    Return JSON: [{barcode, nama, harga_jual, harga_beli}, ...]
+    """
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT barcode, nama, harga_jual, harga_beli
+        FROM v_barang_terbeli
+        ORDER BY nama
+    """)
+    rows = cur.fetchall()
+    cur.close()
+
+    return jsonify([
+        {
+            "barcode": r[0],
+            "nama": r[1],
+            "harga_jual": float(r[3] or 0),
+            "harga_beli": float(r[2] or 0)
+        }
+        for r in rows
+    ])
+
 
 @app.route("/api/barang/<barcode>")
 @login_required
