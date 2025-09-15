@@ -155,7 +155,7 @@ function generateNota(head, items, toko) {
 
   // versi HTML (58mm printer)
   const html = `
-  <div style="font-family: monospace; font-size:12px; max-width:320px; margin:0 auto">
+  <div style="font-family: monospace; font-size:12px; width:100%; max-width:80mm; padding:8px; box-sizing:border-box;padding-bottom: 30px;">
     <div style="text-align:center; font-weight:bold">${toko?.nama || "STRUK PENJUALAN"}</div>
     ${toko?.alamat ? `<div style="text-align:center">${toko.alamat}</div>` : ""}
     <hr/>
@@ -195,7 +195,9 @@ function generateNota(head, items, toko) {
       <tr><td>Metode</td><td style="text-align:right">${head.metode_bayar || ""}</td></tr>
     </table>
     <hr/>
-    <div style="text-align:center">Terima Kasih 🙏</div>
+    <div style="text-align:center; margin-top:10px">Terima Kasih 🙏</div>
+    <div style="height:60px">@</div> 
+    <hr/>
   </div>
 `;
 
