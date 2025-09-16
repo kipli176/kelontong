@@ -16,9 +16,8 @@
     <div class="text-xl font-bold">📄 Penjualan Hari Ini</div>
     <nav class="flex gap-4 text-sm">
       <a href="{{ url_for('kasir') }}" class="hover:underline">🏠 Kasir</a>
-      <a href="{{ url_for('penjualan_hari_ini') }}" class="hover:underline font-semibold underline">📄 Penjualan Hari
+      <a href="{{ url_for('penjualan') }}" class="font-semibold :underline font-semibold underline">📄 Penjualan Hari
         Ini</a>
-      <a href="{{ url_for('laporan') }}" class="hover:underline">📊 Laporan</a>
     </nav>
   </header>
 
@@ -35,17 +34,27 @@
       <!-- ===================== -->
       <!-- TAB TRANSAKSI (lama) -->
       <!-- ===================== -->
-      <div id="paneTransaksi">
-        <div class="flex justify-between mb-2">
-          <h3 class="font-semibold">Transaksi Hari Ini</h3>
-          <div class="flex gap-2">
-            <button onclick="window.open('{{ url_for('print_transaksi_hari_ini') }}','_blank')"
-              class="px-3 py-2 bg-slate-600 text-white rounded text-sm">🖨 Print</button>
-            <a href="{{ url_for('export_hari_ini_xlsx') }}"
+      <div id="paneTransaksi">              
+        <div class="flex justify-between mb-2 items-center">
+          <h3 class="font-semibold">
+            Transaksi Hari Ini
+            <small class="text-slate-600">
+              ({{ keterangan_tanggal }})
+            </small>
+          </h3>
+          <div class="flex gap-2 items-center">
+            <form method="get" class="flex gap-1 items-center">
+              <input type="date" name="start" value="{{ start }}" class="border rounded px-3 py-2 text-sm">
+              <input type="date" name="end" value="{{ end }}" class="border rounded px-3 py-2 text-sm">
+              <button type="submit" class="px-3 py-2 bg-blue-600 text-white rounded text-sm">Terapkan</button>
+            </form>
+            <button onclick="window.open('{{ url_for('print_transaksi_hari_ini', start=start, end=end) }}','_blank')"
+                    class="px-3 py-2 bg-slate-600 text-white rounded text-sm">🖨 Print</button>
+            <a href="{{ url_for('export_transaksi_hari_ini_xlsx', start=start, end=end) }}"
               class="px-3 py-2 bg-emerald-600 text-white rounded text-sm">⬇️ Export Excel</a>
           </div>
         </div>
-        <div class="border rounded overflow-auto max-h-70vh">
+        <div class="border rounded overflow-auto max-h-96">
           <table class="w-full text-sm">
             <thead class="bg-slate-100 sticky top-0">
               <tr>
@@ -66,20 +75,20 @@
               {% set ns.glaba = ns.glaba + (laba or 0) %}
               {% set ns.gitem = ns.gitem + (jml_item or 0) %}
               <tr class="odd:bg-white even:bg-slate-50">
-                <td class="p-2 border whitespace-nowrap">{{ tgl.strftime("%H:%M:%S") }}</td>
+                <td class="p-2 border whitespace-nowrap">{{ tgl.strftime("%d-%m-%Y %H:%M:%S") }}</td>
                 <td class="p-2 border font-mono">TX-{{ tx8|upper }}</td>
                 <td class="p-2 border">{{ nama or "-" }}{% if hp %} — {{ hp }}{% endif %}</td>
                 <td class="p-2 border">{{ metode or "-" }}</td>
                 <td class="p-2 border text-right">{{ jml_item or 0 }}</td>
                 <td class="p-2 border text-right">Rp {{ "{:,.0f}".format(total or 0) }}</td>
                 <td class="p-2 border text-right text-emerald-700">Rp {{ "{:,.0f}".format(laba or 0) }}</td>
-                <td class="p-2 border">
-                  <div class="flex items-center gap-2">
+                <td class="p-2 border text-center">
+                  <div class="items-center gap-2">
                     <button class="px-2 py-1 bg-emerald-600 text-white rounded text-xs"
-                      onclick="printById({{ id }}, toko)">🧾 Cetak Ulang</button>
+                      onclick="printById({{ id }}, { nama: document.body.dataset.tokoNama || '', alamat: document.body.dataset.tokoAlamat || '' })">🧾 Cetak Ulang</button>
                     {% if hp %}
                     <button class="px-2 py-1 bg-blue-600 text-white rounded text-xs"
-                      onclick="waById({{ id }}, '{{ nama|e }}', '{{ hp|e }}', toko)">📲 Kirim WA</button>
+                      onclick="waById({{ id }}, '{{ (nama or '')|e }}', '{{ hp|e }}', { nama: document.body.dataset.tokoNama || '', alamat: document.body.dataset.tokoAlamat || '' })">📲 Kirim WA</button>
                     {% endif %}
                   </div>
                 </td>
@@ -107,21 +116,32 @@
       <!-- TAB DETAIL BARANG (baru) -->
       <!-- ======================= -->
       <div id="paneDetail" class="hidden">
-        <div class="flex justify-between mb-2">
-          <h3 class="font-semibold">Detail Barang Hari Ini</h3>
-          <div class="flex gap-2">
-            <button onclick="window.open('{{ url_for('print_detail_hari_ini') }}','_blank')"
+        <div class="flex justify-between mb-2 items-center">
+          <h3 class="font-semibold">
+            Barang Keluar Hari Ini
+            <small class="text-slate-600">
+              ({{ keterangan_tanggal }})
+            </small>
+          </h3>
+          <div class="flex gap-2 items-center">
+            <form method="get" class="flex gap-1 items-center">
+              <input type="date" name="start" value="{{ start }}" class="border rounded px-3 py-2 text-sm">
+              <input type="date" name="end" value="{{ end }}" class="border rounded px-3 py-2 text-sm">
+              <button type="submit" class="px-3 py-2 bg-blue-600 text-white rounded text-sm">Terapkan</button>
+            </form>
+            <button onclick="window.open('{{ url_for('print_detail_hari_ini', start=start, end=end) }}','_blank')"
                     class="px-3 py-2 bg-slate-600 text-white rounded text-sm">🖨 Print</button>
-            <a href="{{ url_for('export_detail_hari_ini_xlsx') }}"
+            <a href="{{ url_for('export_detail_hari_ini_xlsx', start=start, end=end) }}"
               class="px-3 py-2 bg-emerald-600 text-white rounded text-sm">⬇️ Export Excel</a>
           </div>
         </div>
 
-        <div class="border rounded overflow-auto max-h-70vh">
+        <div class="border rounded overflow-auto max-h-96">
           <table class="w-full text-sm">
             <thead class="bg-slate-100 sticky top-0">
               <tr>
                 <th class="p-2 border">Barang</th>
+                <th class="p-2 border text-right">Harga Beli</th>
                 <th class="p-2 border text-right">Harga Jual</th>
                 <th class="p-2 border text-right">Qty</th>
                 <th class="p-2 border text-right">Total</th>
@@ -131,19 +151,20 @@
             </thead>
             <tbody>
               {% set nd = namespace(gtotal=0, glaba=0, gqty=0) %}
-              {% for barcode, item, hj, qty, total, laba in detail_rows %}
+              {% for barcode, item, hb, hj, qty, total, laba in detail_rows %}
               {% set nd.gtotal = nd.gtotal + (total or 0) %}
               {% set nd.glaba  = nd.glaba + (laba or 0) %}
               {% set nd.gqty   = nd.gqty + (qty or 0) %}
               <tr class="odd:bg-white even:bg-slate-50">
                 <td class="p-2 border">{{ item }}</td>
+                <td class="p-2 border text-right">Rp {{ "{:,.0f}".format(hb or 0) }}</td>
                 <td class="p-2 border text-right">Rp {{ "{:,.0f}".format(hj or 0) }}</td>
                 <td class="p-2 border text-right">{{ qty }}</td>
                 <td class="p-2 border text-right">Rp {{ "{:,.0f}".format(total or 0) }}</td>
                 <td class="p-2 border text-right text-emerald-700">Rp {{ "{:,.0f}".format(laba or 0) }}</td>
                 <td class="p-2 border text-center">
                   <button class="px-2 py-1 bg-blue-600 text-white rounded text-xs"
-                          onclick="showDetailBarang('{{ barcode }}', {{ hj }})">👁 Detail</button>
+                          onclick="showDetailBarang('{{ barcode }}', {{ hj }}, '{{ item }}')">👁 Detail</button>
                 </td>
               </tr>
               {% else %}
@@ -167,7 +188,7 @@
 <!-- Modal -->
 <div id="modalDetailBarang" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
   <div class="bg-white rounded shadow-lg w-3/4 max-h-[80vh] overflow-auto p-4">
-    <h3 class="font-semibold mb-3">Detail Pembelian Barang</h3>
+    <h3 id="modalTitleBarang" class="font-semibold mb-3">Detail Pembelian Barang</h3>
     <table class="w-full text-sm border">
       <thead class="bg-slate-100">
         <tr>
@@ -178,12 +199,19 @@
         </tr>
       </thead>
       <tbody id="modalBodyDetail"></tbody>
+      <tfoot class="bg-slate-200 font-semibold">
+        <tr>
+          <td colspan="3" class="p-2 border text-right">TOTAL</td>
+          <td id="modalTotalQty" class="p-2 border text-right">0</td>
+        </tr>
+      </tfoot>
     </table>
     <div class="mt-3 text-right">
       <button onclick="closeModal()" class="px-3 py-2 bg-slate-500 text-white rounded">Tutup</button>
     </div>
   </div>
 </div>
+
 
     </section>
   </main>
@@ -200,29 +228,40 @@
   <script src="/static/js/app.js"></script>
 
 
-  <script>
-  function showDetailBarang(barcode, harga) {
-    fetch(`/api/detail-barang/${barcode}/${harga}`)
-      .then(r => r.json())
-      .then(data => {
-        const body = document.getElementById("modalBodyDetail");
-        body.innerHTML = "";
-        data.forEach(row => {
-          body.innerHTML += `
-            <tr>
-              <td class="p-2 border">${row.waktu}</td>
-              <td class="p-2 border">TX-${row.tx8}</td>
-              <td class="p-2 border">${row.pembeli} ${row.no_hp ? "— "+row.no_hp : ""}</td>
-              <td class="p-2 border text-right">${row.qty}</td>
-            </tr>`;
-        });
-        document.getElementById("modalDetailBarang").classList.remove("hidden");
+<script>
+function showDetailBarang(barcode, harga, nama) {
+  fetch(`/api/detail-barang/${barcode}/${harga}`)
+    .then(r => r.json())
+    .then(data => {
+      const body = document.getElementById("modalBodyDetail");
+      const title = document.getElementById("modalTitleBarang");
+      const totalCell = document.getElementById("modalTotalQty");
+
+      body.innerHTML = "";
+      title.textContent = `Detail Pembelian Barang: ${nama}`;
+
+      let totalQty = 0;
+      data.forEach(row => {
+        body.innerHTML += `
+          <tr>
+            <td class="p-2 border">${row.waktu}</td>
+            <td class="p-2 border">TX-${row.tx8}</td>
+            <td class="p-2 border">${row.pembeli} ${row.no_hp ? "— "+row.no_hp : ""}</td>
+            <td class="p-2 border text-right">${row.qty}</td>
+          </tr>`;
+        totalQty += row.qty;
       });
-  }
-  function closeModal(){
-    document.getElementById("modalDetailBarang").classList.add("hidden");
-  }
-  </script>
+
+      totalCell.textContent = totalQty;
+      document.getElementById("modalDetailBarang").classList.remove("hidden");
+    });
+}
+
+function closeModal(){
+  document.getElementById("modalDetailBarang").classList.add("hidden");
+}
+</script>
+
 
   <script>
     const tabT = document.getElementById('tabTransaksi');

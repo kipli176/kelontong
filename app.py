@@ -24,10 +24,10 @@ app = Flask(__name__)
 app.secret_key = "ganti_dengan_secret_random"
 
 DB_CONFIG = {
-    # "host": "192.168.1.17",
-    # "port": 15432,
-    "host": "postgres",
-    "port": 5432,
+    "host": "192.168.1.17",
+    "port": 15432,
+    # "host": "postgres",
+    # "port": 5432,
     "dbname": "iin",
     "user": "kipli_user",
     "password": "kipli_password"
@@ -60,12 +60,21 @@ def close_db(exception=None):
         db_pool.putconn(db_conn)
 
 
-def _parse_date(s: str, default: datetime.date):
-    """Parse string tanggal (YYYY-MM-DD) menjadi date, fallback ke default."""
+def _parse_date(s, default):
     try:
         return datetime.strptime(s, "%Y-%m-%d").date()
     except Exception:
         return default
+
+HARI_ID = {
+    "Monday": "Senin",
+    "Tuesday": "Selasa",
+    "Wednesday": "Rabu",
+    "Thursday": "Kamis",
+    "Friday": "Jumat",
+    "Saturday": "Sabtu",
+    "Sunday": "Minggu",
+}
 
 # ============================================
 # HELPER QUERY INTERNAL
@@ -111,58 +120,6 @@ def login_required(fn):
             return redirect(url_for("login"))
         return fn(*args, **kwargs)
     return wrapper
-
-def _fetch_today_details():
-    """
-    Ambil detail transaksi hari ini (view v_penjualan_detail_hari_ini).
-    Return list tuple sesuai kolom view.
-    """
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute("""
-        SELECT tx8, tanggal, pembeli, no_hp,
-               item_nama, qty, harga_jual, potongan, subtotal
-        FROM v_penjualan_detail_hari_ini
-        ORDER BY item_nama
-    """)
-    rows = cur.fetchall()
-    cur.close()
-    return rows
-
-
-def _fetch_laporan_harian(d1, d2):
-    """Ambil data laporan harian antara d1-d2 dari view v_laporan_harian."""
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute("""
-        SELECT tgl, jumlah_transaksi, total_penjualan, total_laba
-        FROM v_laporan_harian
-        WHERE tgl BETWEEN %s AND %s
-        ORDER BY tgl DESC
-    """, (d1, d2))
-    rows = cur.fetchall()
-    cur.close()
-    return rows  # (tgl, jumlah_transaksi, total_penjualan, total_laba)
-
-
-def _fetch_laporan_per_barang(d1, d2):
-    """Ambil laporan agregat per barang antara d1-d2 dari view v_laporan_per_barang_harian."""
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute("""
-        SELECT barcode, nama,
-               SUM(qty_total) AS qty_total,
-               SUM(omzet)     AS omzet,
-               SUM(laba)      AS laba
-        FROM v_laporan_per_barang_harian
-        WHERE tgl BETWEEN %s AND %s
-        GROUP BY barcode, nama
-        ORDER BY omzet DESC NULLS LAST, nama
-    """, (d1, d2))
-    rows = cur.fetchall()
-    cur.close()
-    return rows  # (barcode, nama, qty_total, omzet, laba)
-
 
 # ============================================
 # ROUTE HANDLER (HTML VIEW)
@@ -258,96 +215,133 @@ def register():
 
     return render_template("register.html")
 
-@app.route("/penjualan-hari-ini")
+@app.route("/penjualan")
 @login_required
-def penjualan_hari_ini():
-    """Halaman tab Transaksi & Detail barang hari ini."""
+def penjualan():
     user = get_current_user()
+    today = datetime.now().date()
+
+    # ambil parameter filter dari query string
+    d1 = _parse_date(request.args.get("start", ""), today)
+    d2 = _parse_date(request.args.get("end", ""), today)
+
     conn = get_db()
     cur = conn.cursor()
 
-    # ambil transaksi ringkas per nota
+    # transaksi per nota
     cur.execute("""
         SELECT id, tanggal, tx8, nama, no_hp, metode_bayar, total, laba, jml_item
         FROM v_penjualan_hari_ini
-        WHERE DATE(tanggal) = CURRENT_DATE
+        WHERE DATE(tanggal) BETWEEN %s AND %s
           AND toko_id = %s
         ORDER BY tanggal DESC
-    """, (user["toko"]["id"],))
+    """, (d1, d2, user["toko"]["id"]))
     rows = cur.fetchall()
 
-    # detail barang rekap
+    # rekap barang
     cur.execute("""
-        SELECT barcode, item_nama, harga_jual, total_qty, total_penjualan, total_laba
+        SELECT barcode, item_nama, harga_beli, harga_jual, total_qty, total_penjualan, total_laba
         FROM v_penjualan_rekap_barang_hari_ini
         WHERE toko_id = %s
+          AND tgl BETWEEN %s AND %s
         ORDER BY item_nama, harga_jual
-    """, (user["toko"]["id"],))
+    """, (user["toko"]["id"], d1, d2))
     detail_rows = cur.fetchall()
 
     cur.close()
+
+    # format tanggal untuk judul
+    if d1 == d2:
+        hari = HARI_ID[d1.strftime("%A")]
+        keterangan_tanggal = f"{hari}, {d1.strftime('%d %B %Y')}"
+    else:
+        hari1 = HARI_ID[d1.strftime("%A")]
+        hari2 = HARI_ID[d2.strftime("%A")]
+        keterangan_tanggal = f"{hari1}, {d1.strftime('%d %B %Y')} s/d {hari2}, {d2.strftime('%d %B %Y')}"
+
     return render_template(
         "penjualan_hari_ini.html",
         rows=rows,
         detail_rows=detail_rows,
-        toko=user["toko"]
-    )
-
-@app.route("/penjualan-hari-ini/print-detail")
-@login_required
-def print_detail_hari_ini():
-    """Cetak laporan rekap barang hari ini (HTML siap print)."""
-    user = get_current_user()
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute("""
-        SELECT barcode, item_nama, harga_jual, total_qty, total_penjualan, total_laba
-        FROM v_penjualan_rekap_barang_hari_ini
-        WHERE toko_id = %s
-        ORDER BY item_nama, harga_jual
-    """, (user["toko"]["id"],))
-    rows = cur.fetchall()
-    cur.close()
-
-    return render_template(
-        "print_detail_hari_ini.html",
-        rows=rows,
-        toko=user["toko"]
+        toko=user["toko"],
+        start=d1.strftime("%Y-%m-%d"),
+        end=d2.strftime("%Y-%m-%d"),
+        keterangan_tanggal=keterangan_tanggal
     )
 
 @app.route("/penjualan-hari-ini/print-transaksi")
 @login_required
 def print_transaksi_hari_ini():
-    """Cetak laporan transaksi hari ini (HTML siap print)."""
     user = get_current_user()
+    today = datetime.now().date()
+    d1 = _parse_date(request.args.get("start", ""), today)
+    d2 = _parse_date(request.args.get("end", ""), today)
+
     conn = get_db()
     cur = conn.cursor()
     cur.execute("""
         SELECT tanggal, tx8, nama, no_hp, metode_bayar, jml_item, total, laba
         FROM v_penjualan_hari_ini
-        WHERE DATE(tanggal) = CURRENT_DATE
+        WHERE DATE(tanggal) BETWEEN %s AND %s
           AND toko_id = %s
-        ORDER BY tanggal
-    """, (user["toko"]["id"],))
+        ORDER BY tanggal DESC
+    """, (d1, d2, user["toko"]["id"]))
     rows = cur.fetchall()
     cur.close()
+
+    if d1 == d2:
+        hari = HARI_ID[d1.strftime("%A")]
+        keterangan_tanggal = f"{hari}, {d1.strftime('%d %B %Y')}"
+    else:
+        hari1 = HARI_ID[d1.strftime("%A")]
+        hari2 = HARI_ID[d2.strftime("%A")]
+        keterangan_tanggal = f"{hari1}, {d1.strftime('%d %B %Y')} s/d {hari2}, {d2.strftime('%d %B %Y')}"
 
     return render_template(
         "print_transaksi_hari_ini.html",
         rows=rows,
-        toko=user["toko"]
+        toko=user["toko"],
+        start=d1.strftime("%Y-%m-%d"),
+        end=d2.strftime("%Y-%m-%d"),
+        keterangan_tanggal=keterangan_tanggal
     )
 
-@app.route("/laporan")
+@app.route("/penjualan-hari-ini/print-detail")
 @login_required
-def laporan():
-    """Halaman laporan dengan filter tanggal (default 7 hari terakhir)."""
+def print_detail_hari_ini():
     user = get_current_user()
     today = datetime.now().date()
-    start_default = today - timedelta(days=6)
-    start = request.args.get("start", start_default.strftime("%Y-%m-%d"))
-    end   = request.args.get("end",   today.strftime("%Y-%m-%d"))
-    return render_template("laporan.html", start=start, end=end, toko=user["toko"])
+    d1 = _parse_date(request.args.get("start", ""), today)
+    d2 = _parse_date(request.args.get("end", ""), today)
+
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT barcode, item_nama, harga_beli, harga_jual, total_qty, total_penjualan, total_laba
+        FROM v_penjualan_rekap_barang_hari_ini
+        WHERE toko_id = %s
+          AND tgl BETWEEN %s AND %s
+        ORDER BY item_nama, harga_jual
+    """, (user["toko"]["id"], d1, d2))
+    rows = cur.fetchall()
+    cur.close()
+
+    if d1 == d2:
+        hari = HARI_ID[d1.strftime("%A")]
+        keterangan_tanggal = f"{hari}, {d1.strftime('%d %B %Y')}"
+    else:
+        hari1 = HARI_ID[d1.strftime("%A")]
+        hari2 = HARI_ID[d2.strftime("%A")]
+        keterangan_tanggal = f"{hari1}, {d1.strftime('%d %B %Y')} s/d {hari2}, {d2.strftime('%d %B %Y')}"
+
+    return render_template(
+        "print_detail_hari_ini.html",
+        rows=rows,
+        toko=user["toko"],
+        start=d1.strftime("%Y-%m-%d"),
+        end=d2.strftime("%Y-%m-%d"),
+        keterangan_tanggal=keterangan_tanggal
+    )
 # ============================================
 # API DATA (LAPORAN JSON)
 # ============================================
@@ -388,97 +382,117 @@ def api_detail_barang(barcode, harga):
         })
     return jsonify(result)
 
-@app.route("/api/laporan/harian")
-def api_laporan_harian():
-    """
-    API JSON laporan harian.
-    Default: 7 hari terakhir.
-    """
-    today = datetime.now().date()
-    d1 = _parse_date(request.args.get("start", ""), today - timedelta(days=6))
-    d2 = _parse_date(request.args.get("end",   ""), today)
-
-    rows = _fetch_laporan_harian(d1, d2)
-    gtotal = sum((r[2] or 0) for r in rows)
-    glaba  = sum((r[3] or 0) for r in rows)
-
-    data = [{
-        "tgl": r[0].strftime("%Y-%m-%d"),
-        "jumlah": int(r[1] or 0),
-        "total": float(r[2] or 0),
-        "laba": float(r[3] or 0)
-    } for r in rows]
-
-    return jsonify({
-        "rows": data,
-        "gtotal": gtotal,
-        "glaba": glaba
-    })
-
-
-@app.route("/api/laporan/per-barang")
-def api_laporan_per_barang():
-    """
-    API JSON laporan per barang.
-    Bisa difilter dengan query parameter 'q'.
-    """
-    today = datetime.now().date()
-    d1 = _parse_date(request.args.get("start", ""), today - timedelta(days=6))
-    d2 = _parse_date(request.args.get("end",   ""), today)
-    q  = (request.args.get("q") or "").strip().lower()
-
-    rows = _fetch_laporan_per_barang(d1, d2)
-    items = [{
-        "barcode": r[0],
-        "nama": r[1],
-        "qty": int(r[2] or 0),
-        "omzet": float(r[3] or 0),
-        "laba": float(r[4] or 0)
-    } for r in rows]
-
-    # filter sederhana di server
-    if q:
-        items = [
-            x for x in items
-            if (q in (x["barcode"] or "").lower()
-                or q in (x["nama"] or "").lower())
-        ]
-
-    return jsonify({"rows": items})
-
 
 # ============================================
 # EXPORT EXCEL
 # ============================================
 
-@app.route("/penjualan-hari-ini/export-detail/xlsx")
+@app.route("/penjualan-hari-ini/export-transaksi/xlsx")
 @login_required
-def export_detail_hari_ini_xlsx():
+def export_transaksi_hari_ini_xlsx():
     user = get_current_user()
+    today = datetime.now().date()
+    d1 = _parse_date(request.args.get("start", ""), today)
+    d2 = _parse_date(request.args.get("end", ""), today)
+
     conn = get_db()
     cur = conn.cursor()
     cur.execute("""
-        SELECT barcode, item_nama, harga_jual, total_qty, total_penjualan, total_laba
-        FROM v_penjualan_rekap_barang_hari_ini
-        WHERE toko_id = %s
-        ORDER BY item_nama, harga_jual
-    """, (user["toko"]["id"],))
+        SELECT tanggal, tx8, nama, no_hp, metode_bayar, jml_item, total, laba
+        FROM v_penjualan_hari_ini
+        WHERE DATE(tanggal) BETWEEN %s AND %s
+          AND toko_id = %s
+        ORDER BY tanggal DESC
+    """, (d1, d2, user["toko"]["id"]))
     rows = cur.fetchall()
     cur.close()
 
     wb = openpyxl.Workbook()
     ws = wb.active
-    ws.title = "Rekap Barang Hari Ini"
+    ws.title = "Transaksi"
 
-    headers = ["Barcode", "Nama Barang", "Harga Jual", "Qty", "Total Penjualan", "Total Laba"]
+    # Judul sheet
+    judul = (f"Laporan Transaksi "
+             f"{d1.strftime('%d %b %Y')}" if d1 == d2
+             else f"Laporan Transaksi {d1.strftime('%d %b %Y')} s/d {d2.strftime('%d %b %Y')}")
+    ws.append([user["toko"]["nama"]])
+    ws.append([judul])
+    ws.append([])
+
+    headers = ["Waktu", "No Transaksi", "Pembeli", "Metode", "Item", "Total", "Laba"]
+    ws.append(headers)
+
+    t_item, t_total, t_laba = 0, 0, 0
+    for tgl, tx8, nama, hp, metode, jml_item, total, laba in rows:
+        ws.append([
+            tgl.strftime("%d-%m-%Y %H:%M:%S"),
+            f"TX-{tx8.upper()}",
+            f"{nama or ''} {(hp or '')}",
+            metode,
+            jml_item,
+            float(total or 0),
+            float(laba or 0),
+        ])
+        t_item += jml_item or 0
+        t_total += float(total or 0)
+        t_laba += float(laba or 0)
+
+    ws.append([])
+    ws.append(["TOTAL", "", "", "", t_item, t_total, t_laba])
+
+    bio = BytesIO()
+    wb.save(bio)
+    bio.seek(0)
+    filename = f"transaksi_{d1:%Y%m%d}_{d2:%Y%m%d}.xlsx"
+    return send_file(
+        bio,
+        as_attachment=True,
+        download_name=filename,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+
+@app.route("/penjualan-hari-ini/export-detail/xlsx")
+@login_required
+def export_detail_hari_ini_xlsx():
+    user = get_current_user()
+    today = datetime.now().date()
+    d1 = _parse_date(request.args.get("start", ""), today)
+    d2 = _parse_date(request.args.get("end", ""), today)
+
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT barcode, item_nama, harga_beli, harga_jual, total_qty, total_penjualan, total_laba
+        FROM v_penjualan_rekap_barang_hari_ini
+        WHERE toko_id = %s
+          AND tgl BETWEEN %s AND %s
+        ORDER BY item_nama, harga_jual
+    """, (user["toko"]["id"], d1, d2))
+    rows = cur.fetchall()
+    cur.close()
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Rekap Barang"
+
+    # Judul sheet
+    judul = (f"Laporan Rekap Barang "
+             f"{d1.strftime('%d %b %Y')}" if d1 == d2
+             else f"Laporan Rekap Barang {d1.strftime('%d %b %Y')} s/d {d2.strftime('%d %b %Y')}")
+    ws.append([user["toko"]["nama"]])
+    ws.append([judul])
+    ws.append([])
+
+    headers = ["Barcode", "Nama Barang", "Harga Beli", "Harga Jual", "Qty", "Total Penjualan", "Total Laba"]
     ws.append(headers)
 
     gqty, gtotal, glaba = 0, 0, 0
-    for barcode, item, harga, qty, total, laba in rows:
+    for barcode, item, hb, hj, qty, total, laba in rows:
         ws.append([
             barcode,
             item,
-            float(harga or 0),
+            float(hb or 0),
+            float(hj or 0),
             int(qty or 0),
             float(total or 0),
             float(laba or 0),
@@ -488,12 +502,12 @@ def export_detail_hari_ini_xlsx():
         glaba += float(laba or 0)
 
     ws.append([])
-    ws.append(["", "TOTAL", "", gqty, gtotal, glaba])
+    ws.append(["", "TOTAL", "", "", gqty, gtotal, glaba])
 
     bio = BytesIO()
     wb.save(bio)
     bio.seek(0)
-    filename = f"rekap_barang_{datetime.now().strftime('%Y%m%d')}.xlsx"
+    filename = f"rekap_barang_{d1:%Y%m%d}_{d2:%Y%m%d}.xlsx"
     return send_file(
         bio,
         as_attachment=True,
@@ -501,109 +515,6 @@ def export_detail_hari_ini_xlsx():
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
 
-
-@app.route("/penjualan-hari-ini/export/xlsx")
-def export_hari_ini_xlsx():
-    """
-    Export detail penjualan hari ini ke file Excel.
-    Data diambil dari _fetch_today_details().
-    """
-    rows = _fetch_today_details()
-
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = "Penjualan Hari Ini"
-
-    headers = [
-        "No Tx", "Waktu", "Pembeli", "HP",
-        "Item", "Qty", "Harga Jual", "Potongan", "Subtotal"
-    ]
-    ws.append(headers)
-
-    gtotal = 0
-    for r in rows:
-        # r = (tx8, tanggal, pembeli, no_hp, item_nama, qty, harga_jual, potongan, subtotal)
-        tx8, tgl, pembeli, hp, item, qty, hj, pot, sub = r
-        gtotal += float(sub or 0)
-        ws.append([
-            f"TX-{tx8.upper()}",
-            tgl.strftime("%Y-%m-%d %H:%M:%S"),
-            pembeli, hp, item, int(qty or 0),
-            float(hj), float(pot or 0), float(sub or 0)
-        ])
-
-    # baris kosong + GRAND TOTAL
-    ws.append([])
-    ws.append(["", "", "", "", "", "", "", "GRAND TOTAL", gtotal])
-
-    # tebal untuk label total
-    ws.cell(ws.max_row, 8).font = Font(bold=True)
-    ws.cell(ws.max_row, 9).font = Font(bold=True)
-
-    for col in range(1, len(headers)+1):
-        ws.column_dimensions[get_column_letter(col)].width = 16
-
-    bio = BytesIO()
-    wb.save(bio)
-    bio.seek(0)
-    filename = f"penjualan_hari_ini_{datetime.now().strftime('%Y%m%d')}.xlsx"
-    return send_file(
-        bio,
-        as_attachment=True,
-        download_name=filename,
-        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
-
-
-@app.route("/laporan/export/xlsx")
-def export_laporan_xlsx():
-    """
-    Export rekap harian ke Excel.
-    Data dari _fetch_laporan_harian().
-    """
-    today = datetime.now().date()
-    d1 = _parse_date(request.args.get("start", ""), today - timedelta(days=6))
-    d2 = _parse_date(request.args.get("end",   ""), today)
-
-    rows = _fetch_laporan_harian(d1, d2)
-    gtotal = sum((r[2] or 0) for r in rows)
-    glaba  = sum((r[3] or 0) for r in rows)
-
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = "Rekap Harian"
-
-    headers = ["Tanggal", "Jumlah Transaksi", "Total Penjualan", "Total Laba"]
-    ws.append(headers)
-
-    for r in rows:
-        ws.append([
-            r[0].strftime("%Y-%m-%d"),
-            int(r[1] or 0),
-            float(r[2] or 0),
-            float(r[3] or 0)
-        ])
-
-    ws.append([])
-    ws.append(["", "GRAND TOTAL", gtotal, glaba])
-
-    ws.cell(ws.max_row, 2).font = Font(bold=True)
-    ws.cell(ws.max_row, 3).font = Font(bold=True)
-    ws.cell(ws.max_row, 4).font = Font(bold=True)
-
-    for col in range(1, len(headers)+1):
-        ws.column_dimensions[get_column_letter(col)].width = 22
-
-    bio = BytesIO()
-    wb.save(bio)
-    bio.seek(0)
-    filename = f"laporan_harian_{d1.strftime('%Y%m%d')}_{d2.strftime('%Y%m%d')}.xlsx"
-    return send_file(
-        bio,
-        as_attachment=True,
-        download_name=filename,
-        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
 # ============================================
 # API SINKRONISASI
 # ============================================

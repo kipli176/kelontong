@@ -2,7 +2,7 @@
 <html lang="id">
 <head>
   <meta charset="UTF-8" />
-  <title>Laporan Rekap Barang Hari Ini</title>
+  <title>Laporan Rekap Barang</title>
   <style>
     body { font-family: Arial, sans-serif; font-size: 12px; margin: 20px; }
     h1, h2 { text-align: center; margin: 0; }
@@ -11,15 +11,18 @@
     th { background: #eee; }
     tfoot td { font-weight: bold; }
     .right { text-align: right; }
-    @media print {
-      body { margin: 0; }
-      .no-print { display: none; }
-    }
+    @media print { body { margin: 0; } .no-print { display: none; } }
   </style>
 </head>
 <body>
   <h1>{{ toko.nama }}</h1>
-  <h2>Laporan Rekap Barang Hari Ini</h2>
+  <h2>
+    Laporan Rekap Barang
+    <br>
+    <small>
+      ({{ keterangan_tanggal }})
+    </small>
+  </h2>
   <p style="text-align:center">{{ toko.alamat }}</p>
 
   <table>
@@ -27,6 +30,7 @@
       <tr>
         <th>Barcode</th>
         <th>Nama Barang</th>
+        <th class="right">Harga Beli</th>
         <th class="right">Harga Jual</th>
         <th class="right">Qty</th>
         <th class="right">Total Penjualan</th>
@@ -34,24 +38,25 @@
       </tr>
     </thead>
     <tbody>
-        {% set ns = namespace(qty=0, total=0, laba=0) %}
-        {% for barcode, item, harga, qty, total, laba in rows %}
-            {% set ns.qty   = ns.qty + (qty or 0) %}
-            {% set ns.total = ns.total + (total or 0) %}
-            {% set ns.laba  = ns.laba + (laba or 0) %}
-            <tr>
-                <td>{{ barcode }}</td>
-                <td>{{ item }}</td>
-                <td class="right">Rp {{ "{:,.0f}".format(harga or 0) }}</td>
-                <td class="right">{{ qty }}</td>
-                <td class="right">Rp {{ "{:,.0f}".format(total or 0) }}</td>
-                <td class="right">Rp {{ "{:,.0f}".format(laba or 0) }}</td>
-            </tr>
-        {% endfor %}
+      {% set ns = namespace(qty=0, total=0, laba=0) %}
+      {% for barcode, item, hb, hj, qty, total, laba in rows %}
+        {% set ns.qty   = ns.qty + (qty or 0) %}
+        {% set ns.total = ns.total + (total or 0) %}
+        {% set ns.laba  = ns.laba + (laba or 0) %}
+        <tr>
+          <td>{{ barcode }}</td>
+          <td>{{ item }}</td>
+          <td class="right">Rp {{ "{:,.0f}".format(hb or 0) }}</td>
+          <td class="right">Rp {{ "{:,.0f}".format(hj or 0) }}</td>
+          <td class="right">{{ qty }}</td>
+          <td class="right">Rp {{ "{:,.0f}".format(total or 0) }}</td>
+          <td class="right">Rp {{ "{:,.0f}".format(laba or 0) }}</td>
+        </tr>
+      {% endfor %}
     </tbody>
     <tfoot>
       <tr>
-        <td colspan="3" class="right">TOTAL</td>
+        <td colspan="4" class="right">TOTAL</td>
         <td class="right">{{ ns.qty }}</td>
         <td class="right">Rp {{ "{:,.0f}".format(ns.total) }}</td>
         <td class="right">Rp {{ "{:,.0f}".format(ns.laba) }}</td>

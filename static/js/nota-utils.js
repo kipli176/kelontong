@@ -229,10 +229,13 @@
   `);
       w.document.close();
         const checkClosed = setInterval(() => {
-            if (w.closed) {
-                clearInterval(checkClosed);
+        if (w.closed) {
+            clearInterval(checkClosed);
+            if (typeof focusQuickBarcode === 'function') {
                 focusQuickBarcode();
             }
-        }, 300);
+        }
+    }, 300);
+
     }
  

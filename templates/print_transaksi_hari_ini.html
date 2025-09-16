@@ -2,7 +2,7 @@
 <html lang="id">
 <head>
   <meta charset="UTF-8" />
-  <title>Laporan Transaksi Hari Ini</title>
+  <title>Laporan Transaksi</title>
   <style>
     body { font-family: Arial, sans-serif; font-size: 12px; margin: 20px; }
     h1, h2 { text-align: center; margin: 0; }
@@ -11,22 +11,25 @@
     th { background: #eee; }
     tfoot td { font-weight: bold; }
     .right { text-align: right; }
-    @media print {
-      body { margin: 0; }
-      .no-print { display: none; }
-    }
+    @media print { body { margin: 0; } .no-print { display: none; } }
   </style>
 </head>
 <body>
   <h1>{{ toko.nama }}</h1>
-  <h2>Laporan Transaksi Hari Ini</h2>
+  <h2>
+    Laporan Transaksi
+    <br>
+    <small>
+      ({{ keterangan_tanggal }})
+    </small>
+  </h2>
   <p style="text-align:center">{{ toko.alamat }}</p>
 
   <table>
     <thead>
       <tr>
         <th>Waktu</th>
-        <th>Nota</th>
+        <th>No Transaksi</th>
         <th>Pembeli</th>
         <th>Metode</th>
         <th class="right">Item</th>
@@ -36,30 +39,29 @@
     </thead>
     <tbody>
       {% set ns = namespace(item=0, total=0, laba=0) %}
-        {% for tgl, tx8, nama, hp, metode, jml_item, total, laba in rows %}
-            {% set ns.item  = ns.item + (jml_item or 0) %}
-            {% set ns.total = ns.total + (total or 0) %}
-            {% set ns.laba  = ns.laba + (laba or 0) %}
-            <tr>
-                <td>{{ tgl.strftime("%H:%M:%S") }}</td>
-                <td>TX-{{ tx8|upper }}</td>
-                <td>{{ nama }}{% if hp %} — {{ hp }}{% endif %}</td>
-                <td>{{ metode }}</td>
-                <td class="right">{{ jml_item }}</td>
-                <td class="right">Rp {{ "{:,.0f}".format(total or 0) }}</td>
-                <td class="right">Rp {{ "{:,.0f}".format(laba or 0) }}</td>
-            </tr>
-        {% endfor %}
-
+      {% for tgl, tx8, nama, hp, metode, jml_item, total, laba in rows %}
+        {% set ns.item  = ns.item + (jml_item or 0) %}
+        {% set ns.total = ns.total + (total or 0) %}
+        {% set ns.laba  = ns.laba + (laba or 0) %}
+        <tr>
+          <td>{{ tgl.strftime("%d-%m-%Y %H:%M:%S") }}</td>
+          <td>TX-{{ tx8|upper }}</td>
+          <td>{{ nama }}{% if hp %} — {{ hp }}{% endif %}</td>
+          <td>{{ metode }}</td>
+          <td class="right">{{ jml_item }}</td>
+          <td class="right">Rp {{ "{:,.0f}".format(total or 0) }}</td>
+          <td class="right">Rp {{ "{:,.0f}".format(laba or 0) }}</td>
+        </tr>
+      {% endfor %}
     </tbody>
     <tfoot>
-        <tr>
-            <td colspan="4" class="right">TOTAL</td>
-            <td class="right">{{ ns.item }}</td>
-            <td class="right">Rp {{ "{:,.0f}".format(ns.total) }}</td>
-            <td class="right">Rp {{ "{:,.0f}".format(ns.laba) }}</td>
-        </tr>
-        </tfoot>
+      <tr>
+        <td colspan="4" class="right">TOTAL</td>
+        <td class="right">{{ ns.item }}</td>
+        <td class="right">Rp {{ "{:,.0f}".format(ns.total) }}</td>
+        <td class="right">Rp {{ "{:,.0f}".format(ns.laba) }}</td>
+      </tr>
+    </tfoot>
   </table>
 
   <div class="no-print" style="margin-top:20px; text-align:center;">
