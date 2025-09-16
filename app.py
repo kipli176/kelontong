@@ -276,12 +276,12 @@ def penjualan_hari_ini():
     """, (user["toko"]["id"],))
     rows = cur.fetchall()
 
-    # ambil detail barang keluar hari ini
+    # detail barang rekap
     cur.execute("""
-        SELECT tx8, tanggal, pembeli, no_hp, barcode, item_nama, qty, harga_jual, subtotal, laba
-        FROM v_penjualan_detail_hari_ini
+        SELECT barcode, item_nama, harga_jual, total_qty, total_penjualan, total_laba
+        FROM v_penjualan_rekap_barang_hari_ini
         WHERE toko_id = %s
-        ORDER BY tanggal, item_nama
+        ORDER BY item_nama, harga_jual
     """, (user["toko"]["id"],))
     detail_rows = cur.fetchall()
 
@@ -296,15 +296,15 @@ def penjualan_hari_ini():
 @app.route("/penjualan-hari-ini/print-detail")
 @login_required
 def print_detail_hari_ini():
-    """Cetak laporan detail barang keluar hari ini (HTML siap print)."""
+    """Cetak laporan rekap barang hari ini (HTML siap print)."""
     user = get_current_user()
     conn = get_db()
     cur = conn.cursor()
     cur.execute("""
-        SELECT tx8, tanggal, pembeli, no_hp, barcode, item_nama, qty, harga_jual, subtotal, laba
-        FROM v_penjualan_detail_hari_ini
+        SELECT barcode, item_nama, harga_jual, total_qty, total_penjualan, total_laba
+        FROM v_penjualan_rekap_barang_hari_ini
         WHERE toko_id = %s
-        ORDER BY tanggal, item_nama
+        ORDER BY item_nama, harga_jual
     """, (user["toko"]["id"],))
     rows = cur.fetchall()
     cur.close()
@@ -351,6 +351,42 @@ def laporan():
 # ============================================
 # API DATA (LAPORAN JSON)
 # ============================================
+
+
+@app.route("/api/detail-barang/<barcode>/<harga>")
+@login_required
+def api_detail_barang(barcode, harga):
+    user = get_current_user()
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT LEFT(p.client_tx_id::text, 8) AS tx8,
+               p.tanggal,
+               COALESCE(pb.nama,'') AS pembeli,
+               COALESCE(pb.no_hp,'') AS no_hp,
+               d.qty
+        FROM penjualan p
+        JOIN penjualan_detail d ON d.penjualan_id = p.id
+        LEFT JOIN pembeli pb ON pb.id = p.pembeli_id
+        WHERE DATE(p.tanggal) = CURRENT_DATE
+          AND p.toko_id = %s
+          AND d.barcode = %s
+          AND d.harga_jual = %s
+        ORDER BY p.tanggal
+    """, (user["toko"]["id"], barcode, harga))
+    rows = cur.fetchall()
+    cur.close()
+
+    result = []
+    for tx8, tanggal, pembeli, no_hp, qty in rows:
+        result.append({
+            "tx8": tx8,
+            "waktu": tanggal.strftime("%H:%M:%S"),
+            "pembeli": pembeli,
+            "no_hp": no_hp,
+            "qty": qty
+        })
+    return jsonify(result)
 
 @app.route("/api/laporan/harian")
 def api_laporan_harian():
@@ -422,39 +458,48 @@ def export_detail_hari_ini_xlsx():
     conn = get_db()
     cur = conn.cursor()
     cur.execute("""
-        SELECT tx8, tanggal, pembeli, no_hp, barcode, item_nama, qty, harga_jual, subtotal, laba
-        FROM v_penjualan_detail_hari_ini
+        SELECT barcode, item_nama, harga_jual, total_qty, total_penjualan, total_laba
+        FROM v_penjualan_rekap_barang_hari_ini
         WHERE toko_id = %s
-        ORDER BY tanggal, item_nama
+        ORDER BY item_nama, harga_jual
     """, (user["toko"]["id"],))
     rows = cur.fetchall()
     cur.close()
 
     wb = openpyxl.Workbook()
     ws = wb.active
-    ws.title = "Detail Hari Ini"
+    ws.title = "Rekap Barang Hari Ini"
 
-    headers = ["Nota", "Waktu", "Pembeli", "HP", "Barcode", "Nama Barang", "Qty", "Harga Jual", "Subtotal", "Laba"]
+    headers = ["Barcode", "Nama Barang", "Harga Jual", "Qty", "Total Penjualan", "Total Laba"]
     ws.append(headers)
 
     gqty, gtotal, glaba = 0, 0, 0
-    for tx8, tgl, pembeli, hp, barcode, item, qty, hj, sub, laba in rows:
-        ws.append([f"TX-{tx8.upper()}", tgl.strftime("%H:%M:%S"), pembeli, hp, barcode, item, qty, float(hj), float(sub), float(laba)])
+    for barcode, item, harga, qty, total, laba in rows:
+        ws.append([
+            barcode,
+            item,
+            float(harga or 0),
+            int(qty or 0),
+            float(total or 0),
+            float(laba or 0),
+        ])
         gqty += qty or 0
-        gtotal += float(sub or 0)
+        gtotal += float(total or 0)
         glaba += float(laba or 0)
 
     ws.append([])
-    ws.append(["", "", "TOTAL", "", "", "", gqty, "", gtotal, glaba])
+    ws.append(["", "TOTAL", "", gqty, gtotal, glaba])
 
     bio = BytesIO()
     wb.save(bio)
     bio.seek(0)
-    filename = f"detail_penjualan_{datetime.now().strftime('%Y%m%d')}.xlsx"
-    return send_file(bio,
+    filename = f"rekap_barang_{datetime.now().strftime('%Y%m%d')}.xlsx"
+    return send_file(
+        bio,
         as_attachment=True,
         download_name=filename,
-        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
 
 
 @app.route("/penjualan-hari-ini/export/xlsx")
