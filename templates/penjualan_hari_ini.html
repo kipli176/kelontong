@@ -60,36 +60,32 @@
           </thead>
           <tbody id="txTable">
             {% set ns = namespace(gtotal=0, glaba=0, gitem=0) %}
-            {% for id, tgl, tx8, nama, metode, total, laba, jml_item in rows %}
+            {% for id, tgl, tx8, nama, hp, metode, total, laba, jml_item in rows %}
             {% set ns.gtotal = ns.gtotal + (total or 0) %}
             {% set ns.glaba  = ns.glaba + (laba or 0) %}
             {% set ns.gitem  = ns.gitem + (jml_item or 0) %}
-            <tr>
-              <td>{{ tgl.strftime("%H:%M:%S") }}</td>
-              <td class="font-mono">TX-{{ tx8|upper }}</td>
-              <td>{{ nama or "-" }}</td>
-              <td>{{ metode or "-" }}</td>
-              <td class="text-right">{{ jml_item or 0 }}</td>
-              <td class="text-right">Rp {{ "{:,.0f}".format(total or 0) }}</td>
-              <td class="text-right text-emerald-700">Rp {{ "{:,.0f}".format(laba or 0) }}</td>
-              <td class="text-right">
+            <tr class="odd:bg-white even:bg-slate-50">
+              <td class="p-2 border whitespace-nowrap">{{ tgl.strftime("%H:%M:%S") }}</td>
+              <td class="p-2 border font-mono">TX-{{ tx8|upper }}</td>
+              <td class="p-2 border">{{ nama or "-" }}{% if hp %} — {{ hp }}{% endif %}</td>
+              <td class="p-2 border">{{ metode or "-" }}</td>
+              <td class="p-2 border text-right">{{ jml_item or 0 }}</td>
+              <td class="p-2 border text-right">Rp {{ "{:,.0f}".format(total or 0) }}</td>
+              <td class="p-2 border text-right text-emerald-700">Rp {{ "{:,.0f}".format(laba or 0) }}</td>
+              <td class="p-2 border">
                 <div class="flex items-center gap-2">
-                  <button class="px-2 py-1 bg-emerald-600 text-white rounded text-xs" onclick="printById({{ id }}, {
-                              nama: document.body.dataset.tokoNama || '',
-                              alamat: document.body.dataset.tokoAlamat || ''
-                          })">🧾 Cetak Ulang</button>
+                  <button class="px-2 py-1 bg-emerald-600 text-white rounded text-xs"
+                          onclick="printById({{ id }}, { nama: document.body.dataset.tokoNama, alamat: document.body.dataset.tokoAlamat })">🧾 Cetak Ulang</button>
                   {% if hp %}
-                  <button class="px-2 py-1 bg-blue-600 text-white rounded text-xs" onclick="waById({{ id }}, '{{ (nama or '')|e }}', '{{ hp|e }}', {
-                              nama: document.body.dataset.tokoNama || '',
-                              alamat: document.body.dataset.tokoAlamat || ''
-                          })">📲 Kirim WA</button>
+                  <button class="px-2 py-1 bg-blue-600 text-white rounded text-xs"
+                          onclick="waById({{ id }}, '{{ nama|e }}', '{{ hp|e }}', { nama: document.body.dataset.tokoNama, alamat: document.body.dataset.tokoAlamat })">📲 Kirim WA</button>
                   {% endif %}
                 </div>
               </td>
             </tr>
             {% endfor %}
           </tbody>
-          <tfoot>
+          <tfoot class="bg-slate-200 font-semibold">
             <tr>
               <td colspan="4" class="text-right">TOTAL</td>
               <td class="text-right">{{ ns.gitem }}</td>
@@ -98,6 +94,7 @@
               <td></td>
             </tr>
           </tfoot>
+
         </table>
       </div>
     </section>
