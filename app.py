@@ -21,10 +21,10 @@ app.secret_key = "ganti_dengan_secret_random"
 # =========================================
  
 DB_CONFIG = {
-    "host": "192.168.1.17",
-    "port": 15432,
-    # "host": "postgres",
-    # "port": 5432,
+    # "host": "192.168.1.17",
+    # "port": 15432,
+    "host": "postgres",
+    "port": 5432,
     "dbname": "iin",
     "user": "kipli_user",
     "password": "kipli_password"
