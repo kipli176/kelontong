@@ -266,7 +266,7 @@ def penjualan_hari_ini():
     conn = get_db()
     cur = conn.cursor()
     cur.execute("""
-        SELECT id, tanggal, tx8, nama, no_hp, total, laba
+        SELECT id, tanggal, tx8, nama, metode_bayar, total, laba, jml_item
         FROM v_penjualan_hari_ini
         WHERE DATE(tanggal) = CURRENT_DATE
         ORDER BY tanggal DESC

@@ -46,28 +46,33 @@
 
       <div class="border rounded overflow-auto">
         <table class="w-full text-sm">
-          <thead class="bg-slate-100 sticky top-0">
+          <thead>
             <tr>
               <th class="p-2 border">Waktu</th>
               <th class="p-2 border">No Transaksi</th>
               <th class="p-2 border">Pembeli</th>
+              <th class="p-2 border">Metode</th>
+              <th class="p-2 border text-right">Item</th>
               <th class="p-2 border text-right">Total</th>
               <th class="p-2 border text-right">Laba</th>
               <th class="p-2 border">Aksi</th>
             </tr>
           </thead>
           <tbody id="txTable">
-            {% set ns = namespace(gtotal=0, glaba=0) %}
-            {% for id, tgl, tx8, nama, hp, total, laba in rows %}
+            {% set ns = namespace(gtotal=0, glaba=0, gitem=0) %}
+            {% for id, tgl, tx8, nama, metode, total, laba, jml_item in rows %}
             {% set ns.gtotal = ns.gtotal + (total or 0) %}
-            {% set ns.glaba = ns.glaba + (laba or 0) %}
-            <tr class="odd:bg-white even:bg-slate-50">
-              <td class="p-2 border whitespace-nowrap">{{ tgl.strftime("%H:%M:%S") }}</td>
-              <td class="p-2 border font-mono">TX-{{ tx8|upper }}</td>
-              <td class="p-2 border">{{ nama or "-" }}{% if hp %} — {{ hp }}{% endif %}</td>
-              <td class="p-2 border text-right">Rp {{ "{:,.0f}".format(total or 0) }}</td>
-              <td class="p-2 border text-right text-emerald-700">Rp {{ "{:,.0f}".format(laba or 0) }}</td>
-              <td class="p-2 border">
+            {% set ns.glaba  = ns.glaba + (laba or 0) %}
+            {% set ns.gitem  = ns.gitem + (jml_item or 0) %}
+            <tr>
+              <td>{{ tgl.strftime("%H:%M:%S") }}</td>
+              <td class="font-mono">TX-{{ tx8|upper }}</td>
+              <td>{{ nama or "-" }}</td>
+              <td>{{ metode or "-" }}</td>
+              <td class="text-right">{{ jml_item or 0 }}</td>
+              <td class="text-right">Rp {{ "{:,.0f}".format(total or 0) }}</td>
+              <td class="text-right text-emerald-700">Rp {{ "{:,.0f}".format(laba or 0) }}</td>
+              <td class="text-right">
                 <div class="flex items-center gap-2">
                   <button class="px-2 py-1 bg-emerald-600 text-white rounded text-xs" onclick="printById({{ id }}, {
                               nama: document.body.dataset.tokoNama || '',
@@ -82,18 +87,15 @@
                 </div>
               </td>
             </tr>
-            {% else %}
-            <tr>
-              <td class="p-4 text-center text-slate-500" colspan="6">Belum ada transaksi hari ini.</td>
-            </tr>
             {% endfor %}
           </tbody>
-          <tfoot class="bg-slate-200 font-semibold">
+          <tfoot>
             <tr>
-              <td class="p-2 border text-right" colspan="3">TOTAL</td>
-              <td class="p-2 border text-right">Rp {{ "{:,.0f}".format(ns.gtotal) }}</td>
-              <td class="p-2 border text-right text-emerald-700">Rp {{ "{:,.0f}".format(ns.glaba) }}</td>
-              <td class="p-2 border"></td>
+              <td colspan="4" class="text-right">TOTAL</td>
+              <td class="text-right">{{ ns.gitem }}</td>
+              <td class="text-right">Rp {{ "{:,.0f}".format(ns.gtotal) }}</td>
+              <td class="text-right text-emerald-700">Rp {{ "{:,.0f}".format(ns.glaba) }}</td>
+              <td></td>
             </tr>
           </tfoot>
         </table>

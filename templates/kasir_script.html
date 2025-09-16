@@ -389,7 +389,8 @@
         const potongan = 0;
         if (isNaN(hj) || hj <= 0) return alert("Harga jual wajib diisi dan lebih dari 0");
         if (isNaN(hb) || hb < 0) return alert("Harga beli wajib diisi dan lebih dari 0");
-
+        if (isNaN(qty) || qty <= 0) return alert("Qty wajib diisi dan lebih dari 0");
+        
         const ex = cart.find((i) => i.barcode === barcode && i.harga_jual === hj);
         if (ex) {
             ex.qty += qty;
