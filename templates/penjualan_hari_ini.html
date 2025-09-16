@@ -24,78 +24,132 @@
 
   <!-- Main -->
   <main class="flex-1 p-3 flex flex-col gap-3 overflow-hidden">
-    <!-- Filter bar -->
-    <section class="bg-white rounded shadow-sm p-3 flex items-center gap-2">
-      <input id="q" placeholder="🔎 Cari pembeli / no HP / No Transaksi (TX-)"
-        class="flex-1 border rounded px-3 py-2 text-sm" />
-      <button onclick="doFilter()" class="px-3 py-2 bg-blue-600 text-white rounded text-sm">Cari</button>
-      <button onclick="resetFilter()" class="px-3 py-2 bg-slate-200 rounded text-sm">Reset</button>
-    </section>
 
-    <!-- Tabel transaksi -->
-    <section class="bg-white rounded shadow-sm p-3 overflow-hidden flex-1 flex flex-col">
-
-      <div class="flex items-center justify-between mb-2">
-        <div class="text-lg font-semibold">Transaksi tanggal: {{ rows[0][1] if rows|length > 0 else '' }}</div>
-        <div class="flex items-center gap-2">
-          <a href="{{ url_for('export_hari_ini_xlsx') }}" class="px-3 py-2 bg-emerald-600 text-white rounded text-sm">⬇️
-            Export XLSX</a>
-          <!--span class="text-sm text-slate-600">Total transaksi: {{ rows|length }}</span-->
+    <!-- Tabs -->
+    <section class="bg-white rounded shadow-sm p-3 flex flex-col gap-3 overflow-hidden">
+      <div class="flex gap-2 mb-3">
+        <button id="tabTransaksi" class="px-3 py-2 rounded bg-slate-200">Transaksi</button>
+        <button id="tabDetail" class="px-3 py-2 rounded">Detail Barang</button>
+        <div class="ml-auto flex gap-2">
+          <button id="btnPrint" class="px-3 py-2 bg-slate-600 text-white rounded text-sm">🖨 Print</button>
+          <a id="btnExport" href="{{ url_for('export_hari_ini_xlsx') }}"
+            class="px-3 py-2 bg-emerald-600 text-white rounded text-sm">⬇️ Export Excel</a>
         </div>
       </div>
 
-      <div class="border rounded overflow-auto">
-        <table class="w-full text-sm">
-          <thead>
-            <tr>
-              <th class="p-2 border">Waktu</th>
-              <th class="p-2 border">No Transaksi</th>
-              <th class="p-2 border">Pembeli</th>
-              <th class="p-2 border">Metode</th>
-              <th class="p-2 border text-right">Item</th>
-              <th class="p-2 border text-right">Total</th>
-              <th class="p-2 border text-right">Laba</th>
-              <th class="p-2 border">Aksi</th>
-            </tr>
-          </thead>
-          <tbody id="txTable">
-            {% set ns = namespace(gtotal=0, glaba=0, gitem=0) %}
-            {% for id, tgl, tx8, nama, hp, metode, total, laba, jml_item in rows %}
-            {% set ns.gtotal = ns.gtotal + (total or 0) %}
-            {% set ns.glaba  = ns.glaba + (laba or 0) %}
-            {% set ns.gitem  = ns.gitem + (jml_item or 0) %}
-            <tr class="odd:bg-white even:bg-slate-50">
-              <td class="p-2 border whitespace-nowrap">{{ tgl.strftime("%H:%M:%S") }}</td>
-              <td class="p-2 border font-mono">TX-{{ tx8|upper }}</td>
-              <td class="p-2 border">{{ nama or "-" }}{% if hp %} — {{ hp }}{% endif %}</td>
-              <td class="p-2 border">{{ metode or "-" }}</td>
-              <td class="p-2 border text-right">{{ jml_item or 0 }}</td>
-              <td class="p-2 border text-right">Rp {{ "{:,.0f}".format(total or 0) }}</td>
-              <td class="p-2 border text-right text-emerald-700">Rp {{ "{:,.0f}".format(laba or 0) }}</td>
-              <td class="p-2 border">
-                <div class="flex items-center gap-2">
-                  <button class="px-2 py-1 bg-emerald-600 text-white rounded text-xs"
-                          onclick="printById({{ id }}, { nama: document.body.dataset.tokoNama, alamat: document.body.dataset.tokoAlamat })">🧾 Cetak Ulang</button>
-                  {% if hp %}
-                  <button class="px-2 py-1 bg-blue-600 text-white rounded text-xs"
-                          onclick="waById({{ id }}, '{{ nama|e }}', '{{ hp|e }}', { nama: document.body.dataset.tokoNama, alamat: document.body.dataset.tokoAlamat })">📲 Kirim WA</button>
-                  {% endif %}
-                </div>
-              </td>
-            </tr>
-            {% endfor %}
-          </tbody>
-          <tfoot class="bg-slate-200 font-semibold">
-            <tr>
-              <td colspan="4" class="text-right">TOTAL</td>
-              <td class="text-right">{{ ns.gitem }}</td>
-              <td class="text-right">Rp {{ "{:,.0f}".format(ns.gtotal) }}</td>
-              <td class="text-right text-emerald-700">Rp {{ "{:,.0f}".format(ns.glaba) }}</td>
-              <td></td>
-            </tr>
-          </tfoot>
+      <!-- ===================== -->
+      <!-- TAB TRANSAKSI (lama) -->
+      <!-- ===================== -->
+      <div id="paneTransaksi">
+        <div class="border rounded overflow-auto">
+          <table class="w-full text-sm">
+            <thead class="bg-slate-100 sticky top-0">
+              <tr>
+                <th class="p-2 border">Waktu</th>
+                <th class="p-2 border">No Transaksi</th>
+                <th class="p-2 border">Pembeli</th>
+                <th class="p-2 border">Metode</th>
+                <th class="p-2 border text-right">Item</th>
+                <th class="p-2 border text-right">Total</th>
+                <th class="p-2 border text-right">Laba</th>
+                <th class="p-2 border">Aksi</th>
+              </tr>
+            </thead>
+            <tbody id="tbTransaksi">
+              {% set ns = namespace(gtotal=0, glaba=0, gitem=0) %}
+              {% for id, tgl, tx8, nama, hp, metode, total, laba, jml_item in rows %}
+              {% set ns.gtotal = ns.gtotal + (total or 0) %}
+              {% set ns.glaba  = ns.glaba + (laba or 0) %}
+              {% set ns.gitem  = ns.gitem + (jml_item or 0) %}
+              <tr class="odd:bg-white even:bg-slate-50">
+                <td class="p-2 border whitespace-nowrap">{{ tgl.strftime("%H:%M:%S") }}</td>
+                <td class="p-2 border font-mono">TX-{{ tx8|upper }}</td>
+                <td class="p-2 border">{{ nama or "-" }}{% if hp %} — {{ hp }}{% endif %}</td>
+                <td class="p-2 border">{{ metode or "-" }}</td>
+                <td class="p-2 border text-right">{{ jml_item or 0 }}</td>
+                <td class="p-2 border text-right">Rp {{ "{:,.0f}".format(total or 0) }}</td>
+                <td class="p-2 border text-right text-emerald-700">Rp {{ "{:,.0f}".format(laba or 0) }}</td>
+                <td class="p-2 border">
+                  <div class="flex items-center gap-2">
+                    <button class="px-2 py-1 bg-emerald-600 text-white rounded text-xs"
+                            onclick="printById({{ id }}, toko)">🧾 Cetak Ulang</button>
+                    {% if hp %}
+                    <button class="px-2 py-1 bg-blue-600 text-white rounded text-xs"
+                            onclick="waById({{ id }}, '{{ nama|e }}', '{{ hp|e }}', toko)">📲 Kirim WA</button>
+                    {% endif %}
+                  </div>
+                </td>
+              </tr>
+              {% else %}
+              <tr>
+                <td class="p-4 text-center text-slate-500" colspan="8">Belum ada transaksi hari ini.</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+            <tfoot class="bg-slate-200 font-semibold">
+              <tr>
+                <td colspan="4" class="text-right">TOTAL</td>
+                <td class="p-2 border text-right">{{ ns.gitem }}</td>
+                <td class="p-2 border text-right">Rp {{ "{:,.0f}".format(ns.gtotal) }}</td>
+                <td class="p-2 border text-right text-emerald-700">Rp {{ "{:,.0f}".format(ns.glaba) }}</td>
+                <td></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
 
-        </table>
+      <!-- ======================= -->
+      <!-- TAB DETAIL BARANG (baru) -->
+      <!-- ======================= -->
+      <div id="paneDetail" class="hidden">
+        <div class="border rounded overflow-auto">
+          <table class="w-full text-sm">
+            <thead class="bg-slate-100 sticky top-0">
+              <tr>
+                <th class="p-2 border">Waktu</th>
+                <th class="p-2 border">Nota</th>
+                <th class="p-2 border">Pembeli</th>
+                <th class="p-2 border">Barang</th>
+                <th class="p-2 border text-right">Qty</th>
+                <th class="p-2 border text-right">Harga Jual</th>
+                <th class="p-2 border text-right">Subtotal</th>
+                <th class="p-2 border text-right">Laba</th>
+              </tr>
+            </thead>
+            <tbody id="tbDetail">
+              {% set nd = namespace(gtotal=0, glaba=0, gqty=0) %}
+              {% for tx8, tgl, pembeli, hp, barcode, item, qty, hj, sub, laba in detail_rows %}
+              {% set nd.gtotal = nd.gtotal + (sub or 0) %}
+              {% set nd.glaba  = nd.glaba + (laba or 0) %}
+              {% set nd.gqty   = nd.gqty + (qty or 0) %}
+              <tr class="odd:bg-white even:bg-slate-50">
+                <td class="p-2 border">{{ tgl.strftime("%H:%M:%S") }}</td>
+                <td class="p-2 border">TX-{{ tx8|upper }}</td>
+                <td class="p-2 border">{{ pembeli }}{% if hp %} — {{ hp }}{% endif %}</td>
+                <td class="p-2 border">{{ item }}</td>
+                <td class="p-2 border text-right">{{ qty }}</td>
+                <td class="p-2 border text-right">Rp {{ "{:,.0f}".format(hj or 0) }}</td>
+                <td class="p-2 border text-right">Rp {{ "{:,.0f}".format(sub or 0) }}</td>
+                <td class="p-2 border text-right text-emerald-700">Rp {{ "{:,.0f}".format(laba or 0) }}</td>
+              </tr>
+              {% else %}
+              <tr>
+                <td class="p-4 text-center text-slate-500" colspan="8">Belum ada detail barang hari ini.</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+            <tfoot class="bg-slate-200 font-semibold">
+              <tr>
+                <td colspan="4" class="text-right">TOTAL</td>
+                <td class="p-2 border text-right">{{ nd.gqty }}</td>
+                <td></td>
+                <td class="p-2 border text-right">Rp {{ "{:,.0f}".format(nd.gtotal) }}</td>
+                <td class="p-2 border text-right text-emerald-700">Rp {{ "{:,.0f}".format(nd.glaba) }}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
       </div>
     </section>
   </main>
@@ -110,6 +164,32 @@
   <script src="/static/js/nota-utils.js"></script>
   <script src="/static/js/app.js"></script>
 
+  
+  <script>
+  const tabT = document.getElementById('tabTransaksi');
+  const tabD = document.getElementById('tabDetail');
+  const paneT = document.getElementById('paneTransaksi');
+  const paneD = document.getElementById('paneDetail');
+  const btnPrint = document.getElementById('btnPrint');
+  const btnExport = document.getElementById('btnExport');
+
+  function activate(tab){
+    if(tab==='transaksi'){
+      paneT.classList.remove('hidden'); paneD.classList.add('hidden');
+      tabT.classList.add('bg-slate-200'); tabD.classList.remove('bg-slate-200');
+      btnExport.href = "{{ url_for('export_hari_ini_xlsx') }}";
+      btnPrint.onclick = ()=>window.print();  // print transaksi
+    } else {
+      paneD.classList.remove('hidden'); paneT.classList.add('hidden');
+      tabD.classList.add('bg-slate-200'); tabT.classList.remove('bg-slate-200');
+      btnExport.href = "{{ url_for('export_detail_hari_ini_xlsx') }}";
+      btnPrint.onclick = ()=>window.print();  // print detail
+    }
+  }
+  tabT.onclick=()=>activate('transaksi');
+  tabD.onclick=()=>activate('detail');
+  activate('transaksi');
+  </script>
   <!-- Script: cetak & WA -->
   <script>
     const fmt = n => "Rp " + (n || 0).toLocaleString('id-ID');

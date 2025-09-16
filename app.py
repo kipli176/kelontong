@@ -269,8 +269,9 @@ def penjualan_hari_ini():
         SELECT id, tanggal, tx8, nama, no_hp, metode_bayar, total, laba, jml_item
         FROM v_penjualan_hari_ini
         WHERE DATE(tanggal) = CURRENT_DATE
+          AND toko_id = %s
         ORDER BY tanggal DESC
-    """)
+    """, (user["toko"]["id"],))
     rows = cur.fetchall()
     cur.close()
     return render_template("penjualan_hari_ini.html", rows=rows, toko=user["toko"])
@@ -352,6 +353,48 @@ def api_laporan_per_barang():
 # ============================================
 # EXPORT EXCEL
 # ============================================
+
+@app.route("/penjualan-hari-ini/export-detail/xlsx")
+@login_required
+def export_detail_hari_ini_xlsx():
+    user = get_current_user()
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT tx8, tanggal, pembeli, no_hp, barcode, item_nama, qty, harga_jual, subtotal, laba
+        FROM v_penjualan_detail_hari_ini
+        WHERE toko_id = %s
+        ORDER BY tanggal, item_nama
+    """, (user["toko"]["id"],))
+    rows = cur.fetchall()
+    cur.close()
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Detail Hari Ini"
+
+    headers = ["Nota", "Waktu", "Pembeli", "HP", "Barcode", "Nama Barang", "Qty", "Harga Jual", "Subtotal", "Laba"]
+    ws.append(headers)
+
+    gqty, gtotal, glaba = 0, 0, 0
+    for tx8, tgl, pembeli, hp, barcode, item, qty, hj, sub, laba in rows:
+        ws.append([f"TX-{tx8.upper()}", tgl.strftime("%H:%M:%S"), pembeli, hp, barcode, item, qty, float(hj), float(sub), float(laba)])
+        gqty += qty or 0
+        gtotal += float(sub or 0)
+        glaba += float(laba or 0)
+
+    ws.append([])
+    ws.append(["", "", "TOTAL", "", "", "", gqty, "", gtotal, glaba])
+
+    bio = BytesIO()
+    wb.save(bio)
+    bio.seek(0)
+    filename = f"detail_penjualan_{datetime.now().strftime('%Y%m%d')}.xlsx"
+    return send_file(bio,
+        as_attachment=True,
+        download_name=filename,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
 
 @app.route("/penjualan-hari-ini/export/xlsx")
 def export_hari_ini_xlsx():
