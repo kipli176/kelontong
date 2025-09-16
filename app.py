@@ -690,8 +690,8 @@ def api_all_barang():
         {
             "barcode": r[0],
             "nama": r[1],
-            "harga_jual": float(r[3] or 0),
-            "harga_beli": float(r[2] or 0)
+            "harga_jual": float(r[2] or 0),
+            "harga_beli": float(r[3] or 0)
         }
         for r in rows
     ])

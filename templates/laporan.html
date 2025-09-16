@@ -4,7 +4,8 @@
   <meta charset="UTF-8" />
   <title>Laporan — Kasir</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- <script src="https://cdn.tailwindcss.com"></script> -->
+  <link href="/static/css/style.css" rel="stylesheet">
 </head>
 <body class="h-screen w-screen bg-slate-100 flex flex-col">
 
@@ -104,6 +105,7 @@
     Shortcut: <kbd class="px-1">F5</kbd> refresh • <a href="{{ url_for('kasir') }}" class="underline">Kembali ke Kasir</a>
   </footer>
 
+  <script src="/static/js/app.js"></script>
   <script>
     const fmt = n => "Rp " + (n||0).toLocaleString('id-ID');
 

@@ -1,603 +1,398 @@
+
+<script src="/static/js/esc-pos-encoder.umd.min.js"></script>
+<script src="/static/js/ua-parser.min.js"></script>
+<script src="/static/js/nota-utils.js"></script>
+<script src="/static/js/app.js"></script>
 <script>
-    // ======= UTIL =======
-    const fmt = n => "Rp " + (n || 0).toLocaleString('id-ID');
+    // ======= UTILITAS DASAR =======
+    const fmt = n => "Rp " + (n || 0).toLocaleString("id-ID");
     const load = (k, d) => JSON.parse(localStorage.getItem(k) || JSON.stringify(d));
     const save = (k, v) => localStorage.setItem(k, JSON.stringify(v));
 
-    let cart = load("cart", []); // [{barcode,nama,harga_jual,harga_beli,qty, potongan}]
-    let master = load("masterBarang", {}); // { barcode: {nama,harga_jual,harga_beli} }
+    function generateUUID() {
+        if (crypto?.randomUUID) {
+            return crypto.randomUUID();
+        }
+        // fallback: UUID v4 pseudo
+        return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function (c) {
+            const r = Math.random() * 16 | 0;
+            const v = c === "x" ? r : (r & 0x3 | 0x8);
+            return v.toString(16);
+        });
+    }
+
+    function getNumericIdOrNull(val) {
+        return (/^\d+$/).test(String(val || "")) ? parseInt(val, 10) : null;
+    }
 
     function tickNow() {
-        const el = document.getElementById('now');
+        const el = document.getElementById("now");
         if (el) {
-            el.textContent =
-                new Date().toLocaleString('id-ID', {
-                    dateStyle: 'full',
-                    timeStyle: 'medium'
-                });
+            el.textContent = new Date().toLocaleString("id-ID", {
+                dateStyle: "full",
+                timeStyle: "medium",
+            });
         }
     }
     setInterval(tickNow, 1000);
     tickNow();
 
-    function getNumericIdOrNull(val) {
-        // hanya pakai ID numerik; jika "local:xxxx" atau kosong -> null
-        return (/^\d+$/).test(String(val || "")) ? parseInt(val, 10) : null;
+    let cart = load("cart", []); // [{barcode,nama,harga_jual,harga_beli,qty,potongan}]
+    let master = load("masterBarang", {}); // { barcode: {nama,harga_jual,harga_beli} }
+
+    function clearItemForm() {
+        document.getElementById("mBarcode").value = "";
+        document.getElementById("mNama").value = "";
+        document.getElementById("mHargaJual").value = "";
+        document.getElementById("mHargaBeli").value = "";
+        document.getElementById("mQty").value = 1;
+        document.getElementById("mBarcode").focus();
     }
-    // ======= RENDER CART =======
+
+    /**
+     * Populate <select> element dengan data
+     * @param {HTMLSelectElement} selectEl - elemen select tujuan
+     * @param {Array} items - array data
+     * @param {Function} getValue - fungsi (item) => string, untuk value option
+     * @param {Function} getLabel - fungsi (item) => string, untuk teks option
+     * @param {Function} [extraHandler] - opsional, fungsi (item, optionEl) => void untuk set atribut tambahan
+     * @param {String} [defaultText] - opsi pertama default
+     */
+    function populateSelect(selectEl, items, getValue, getLabel, extraHandler, defaultText = "(Pilih)") {
+        if (!selectEl) return;
+        const prev = selectEl.value;
+
+        // kosongkan dulu
+        selectEl.innerHTML = "";
+        if (defaultText) {
+            const opt = document.createElement("option");
+            opt.value = "";
+            opt.text = defaultText;
+            selectEl.add(opt);
+        }
+
+        // buat opsi baru
+        items.forEach((item) => {
+            const opt = document.createElement("option");
+            opt.value = getValue(item);
+            opt.text = getLabel(item);
+            if (extraHandler) extraHandler(item, opt);
+            selectEl.add(opt);
+        });
+
+        // restore pilihan sebelumnya jika masih ada
+        if (prev && [...selectEl.options].some((o) => o.value === prev)) {
+            selectEl.value = prev;
+        }
+    }
+
+    const shortcutMap = {};
+
+    /**
+     * Daftarkan shortcut baru
+     * @param {string} key - tombol keyboard, contoh "F2", "+", "Escape"
+     * @param {function} action - fungsi yang dijalankan
+     */
+    function registerShortcut(key, action) {
+        shortcutMap[key] = action;
+    }
+
+    /**
+     * Listener global keyboard
+     */
+    document.addEventListener("keydown", (e) => {
+        const fn = shortcutMap[e.key];
+        if (fn) {
+            e.preventDefault();
+            fn(e);
+        }
+    });
+
+    // ======= MASTER BARANG & TYPEAHEAD =======
+    async function preloadBarang() {
+        try {
+            const res = await fetch("/api/all-barang");
+            if (!res.ok) throw new Error("HTTP " + res.status);
+            const list = await res.json();
+
+            const master = {};
+            for (const b of list) {
+                master[b.barcode] = {
+                    nama: b.nama,
+                    harga_jual: b.harga_jual,
+                    harga_beli: b.harga_beli,
+                };
+            }
+            save("masterBarang", master);
+            console.log("✅ Master barang terisi:", Object.keys(master).length);
+        } catch (err) {
+            console.error("Gagal preload barang:", err);
+        }
+    }
+    window.addEventListener("load", preloadBarang);
+
+    function suggestBarang(query) {
+        query = (query || "").toLowerCase();
+        const master = load("masterBarang", {});
+        return Object.entries(master)
+            .map(([barcode, b]) => ({ barcode, ...b }))
+            .filter(
+                (b) =>
+                    b.barcode.toLowerCase().includes(query) ||
+                    (b.nama || "").toLowerCase().includes(query)
+            )
+            .slice(0, 10);
+    }
+
+    function selectSuggestion(inputEl, item) {
+        inputEl.value = item.barcode;
+        const box = document.getElementById(inputEl.id + "-suggestions");
+        box?.classList.add("hidden");
+
+        // update master
+        master[item.barcode] = {
+            nama: item.nama,
+            harga_jual: item.harga_jual,
+            harga_beli: item.harga_beli
+        };
+        save("masterBarang", master);
+
+        // isi form sesuai konteks
+        if (inputEl.id === "quickBarcode") {
+            openModal("itemModal");
+            prefillFromMaster(item.barcode);
+        }
+        if (inputEl.id === "mBarcode") {
+            prefillFromMaster(item.barcode);
+            setTimeout(() => {
+                document.getElementById("mQty")?.focus();
+                document.getElementById("mQty")?.select();
+            }, 30);
+        }
+    }
+
+    function showSuggestions(inputEl, results) {
+        const box = document.getElementById(inputEl.id + "-suggestions");
+        if (!box) return;
+
+        if (!results.length) {
+            box.classList.add("hidden");
+            return;
+        }
+
+        box.innerHTML = "";
+        results.forEach((item) => {
+            const opt = document.createElement("div");
+            opt.className = "px-2 py-1 hover:bg-blue-100 cursor-pointer text-sm";
+            opt.textContent = `${item.barcode} — ${item.nama}`;
+            opt.__data = item; // simpan data item di elemen
+            opt.onclick = () => selectSuggestion(inputEl, item);
+            box.appendChild(opt);
+        });
+
+        box.classList.remove("hidden");
+    }
+
+
+    function enableKeyboardNav(inputEl) {
+        let selectedIndex = -1;
+
+        inputEl.addEventListener("keydown", (e) => {
+            const box = document.getElementById(inputEl.id + "-suggestions");
+            if (!box || box.classList.contains("hidden")) return;
+
+            const options = box.querySelectorAll("div");
+            if (!options.length) return;
+
+            if (e.key === "ArrowDown") {
+                e.preventDefault();
+                selectedIndex = (selectedIndex + 1) % options.length;
+            }
+            if (e.key === "ArrowUp") {
+                e.preventDefault();
+                selectedIndex = (selectedIndex - 1 + options.length) % options.length;
+            }
+            if (e.key === "Enter") {
+                e.preventDefault();
+                if (selectedIndex >= 0 && selectedIndex < options.length) {
+                    const item = options[selectedIndex].__data;
+                    selectSuggestion(inputEl, item);
+                    selectedIndex = -1;
+                    e.stopPropagation(); // ⛔ cegah lanjut ke wireModalKeys
+                }
+            }
+            if (e.key === "Escape") {
+                e.preventDefault();
+                box.classList.add("hidden");
+                selectedIndex = -1;
+            }
+
+            options.forEach((opt, i) => {
+                opt.classList.toggle("bg-blue-500", i === selectedIndex);
+                opt.classList.toggle("text-white", i === selectedIndex);
+            });
+        });
+
+        inputEl.addEventListener("input", () => {
+            selectedIndex = -1;
+        });
+    }
+
+    enableKeyboardNav(document.getElementById("quickBarcode"));
+    enableKeyboardNav(document.getElementById("mBarcode"));
+
+    function attachSuggestListener(id) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        const box = document.getElementById(id + "-suggestions");
+
+        el.addEventListener("input", (e) => {
+            const q = e.target.value.trim();
+            if (q.length < 2) {
+                box?.classList.add("hidden");
+                return;
+            }
+            const hasil = suggestBarang(q);
+            showSuggestions(e.target, hasil);
+
+            // ✅ kalau hanya ada 1 hasil & query cocok persis, auto pilih
+            if (id === "mBarcode" && hasil.length === 1 && hasil[0].barcode === q) {
+                selectSuggestion(el, hasil[0]);
+            }
+        });
+
+        el.addEventListener("blur", () => {
+            setTimeout(() => box?.classList.add("hidden"), 150);
+        });
+    }
+
+    ["quickBarcode", "mBarcode"].forEach(attachSuggestListener);
+
+
+    function handleQuickBarcodeInput(val) {
+        openModal("itemModal");
+        prefillFromMaster(val);
+
+        // langsung fokus ke qty
+        setTimeout(() => {
+            document.getElementById("mQty")?.focus();
+            document.getElementById("mQty")?.select();
+        }, 30);
+    } 
+
+    // ======= CART (KERANJANG) =======
     function renderCart() {
-        const tbody = document.getElementById('cartTable');
+        const tbody = document.getElementById("cartTable");
         tbody.innerHTML = "";
         let total = 0;
 
         cart.forEach((it, i) => {
             const pot = it.potongan || 0;
-            const sub = (it.qty * it.harga_jual) - pot;
-            //  const sub = it.qty * it.harga_jual - (it.potongan||0);
+            const sub = it.qty * it.harga_jual - pot;
             total += sub;
-            tbody.insertAdjacentHTML('beforeend', `
-  <tr data-idx="${i}" class="odd:bg-white even:bg-slate-50">
-    <td class="p-2 border">${i + 1}</td>
-    <td class="p-2 border">${it.barcode}</td>
-    <td class="p-2 border text-left">${it.nama}</td>
-    <!-- QTY: klik untuk edit -->
-    <td class="p-2 border text-center col-qty">
-      <button class="underline text-blue-600" onclick="editQty(${i})">${it.qty}</button>
-    </td>
-    <td class="p-2 border">${fmt(it.harga_jual)}</td>
-    <!-- POTONGAN -->
-    <td class="p-2 border text-right col-potongan">
-      <button class="underline text-blue-600" onclick="editPotongan(${i})">${fmt(pot)}</button>
-    </td>
-    <td class="p-2 border font-semibold">${fmt(sub)}</td>
-    <td class="p-2 border">
-      <button class="text-red-600 hover:underline" onclick="removeItem(${i})">🗑️</button>
-    </td>
-  </tr>
-`);
 
-
+            tbody.insertAdjacentHTML(
+                "beforeend",
+                `
+    <tr data-idx="${i}" class="odd:bg-white even:bg-slate-50">
+      <td class="p-2 border">${i + 1}</td>
+      <td class="p-2 border">${it.barcode}</td>
+      <td class="p-2 border text-left">${it.nama}</td>
+      <td class="p-2 border text-center col-qty">
+        <button class="underline text-blue-600" onclick="editCell(${i}, 'qty', '.col-qty', 1)">${it.qty}</button>
+      </td>
+      <td class="p-2 border">${fmt(it.harga_jual)}</td>
+      <td class="p-2 border text-right col-potongan">
+        <button class="underline text-blue-600" onclick="editCell(${i}, 'potongan', '.col-potongan', 0)">${fmt(pot)}</button>
+      </td>
+      <td class="p-2 border font-semibold">${fmt(sub)}</td>
+      <td class="p-2 border">
+        <button class="text-red-600 hover:underline" onclick="removeItem(${i})">🗑️</button>
+      </td>
+    </tr>
+  `
+            );
         });
-        document.getElementById('totalView').textContent = fmt(total);
+
+        document.getElementById("totalView").textContent = fmt(total);
         save("cart", cart);
     }
 
-    function editPotongan(idx) {
-        const tbody = document.getElementById('cartTable');
-        if (!tbody) return;
+    function editCell(idx, field, selector, min = 0) {
+        const tbody = document.getElementById("cartTable");
         const tr = tbody.querySelector(`tr[data-idx="${idx}"]`);
-        if (!tr) {
-            // fallback: render ulang lalu coba lagi sekali
-            renderCart();
-            const tr2 = tbody.querySelector(`tr[data-idx="${idx}"]`);
-            if (!tr2) return; // baris sudah tidak ada (mis. item dihapus)
-            return editPotongan(idx);
-        }
-        const td = tr.querySelector('.col-potongan');
+        const td = tr?.querySelector(selector);
         if (!td) return;
 
-        const current = parseInt(cart[idx].potongan || 0, 10);
-        td.innerHTML = `<input type="number" class="w-24 border rounded px-2 py-1 text-right" id="pot-input-${idx}" value="${current}">`;
-        const inp = document.getElementById(`pot-input-${idx}`);
-        if (!inp) return;
+        const current = parseInt(cart[idx][field] || 0, 10);
+        td.innerHTML = `<input type="number" min="${min}" class="w-20 border rounded px-2 py-1 text-right" id="cell-input-${field}-${idx}" value="${current}">`;
+
+        const inp = document.getElementById(`cell-input-${field}-${idx}`);
         inp.focus();
         inp.select();
 
         const commit = () => {
-            const val = parseInt(inp.value, 10);
-            cart[idx].potongan = isNaN(val) ? 0 : Math.max(0, val);
+            let val = parseInt(inp.value, 10);
+            if (isNaN(val) || val < min) val = min;
+            cart[idx][field] = val;
             renderCart();
-            // kembalikan fokus ke tombol potongan pada baris yang sama (jika masih ada)
-            const trAfter = tbody.querySelector(`tr[data-idx="${idx}"]`);
-            const btn = trAfter?.querySelector('.col-potongan button');
-            if (btn) btn.focus();
         };
 
-        inp.addEventListener('blur', commit, {
-            once: true
-        });
-        inp.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                commit();
-            }
-            if (e.key === 'Escape') {
-                e.preventDefault();
-                renderCart();
-            }
+        inp.addEventListener("blur", commit, { once: true });
+        inp.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") { e.preventDefault(); commit(); }
+            if (e.key === "Escape") { e.preventDefault(); renderCart(); }
         });
     }
-function editQty(idx) {
-  const tbody = document.getElementById('cartTable');
-  if (!tbody) return;
-  const tr = tbody.querySelector(`tr[data-idx="${idx}"]`);
-  if (!tr) return;
-
-  const td = tr.querySelector('.col-qty');
-  if (!td) return;
-
-  const current = parseInt(cart[idx].qty || 0, 10);
-  td.innerHTML = `<input type="number" min="1" class="w-20 border rounded px-2 py-1 text-right" 
-                  id="qty-input-${idx}" value="${current}">`;
-  const inp = document.getElementById(`qty-input-${idx}`);
-  inp.focus();
-  inp.select();
-
-  const commit = () => {
-    let val = parseInt(inp.value, 10);
-    if (isNaN(val) || val <= 0) val = 1;
-    cart[idx].qty = val;
-    renderCart();
-
-    // balikin fokus ke tombol qty
-    const trAfter = tbody.querySelector(`tr[data-idx="${idx}"]`);
-    const btn = trAfter?.querySelector('.col-qty button');
-    if (btn) btn.focus();
-  };
-
-  inp.addEventListener('blur', commit, { once: true });
-  inp.addEventListener('keydown', e => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      commit();
-    }
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      renderCart();
-    }
-  });
-}
-
+ 
     function removeItem(idx) {
         cart.splice(idx, 1);
         renderCart();
     }
-
-
-async function preloadBarang() {
-  try {
-    const res = await fetch("/api/all-barang");
-    if (!res.ok) throw new Error("HTTP " + res.status);
-    const list = await res.json(); // [{barcode,nama,harga_jual,harga_beli}, ...]
-
-    const master = {};
-    for (const b of list) {
-      master[b.barcode] = {
-        nama: b.nama,
-        harga_jual: b.harga_jual,
-        harga_beli: b.harga_beli
-      };
-    }
-    save("masterBarang", master);
-    console.log("✅ Master barang terisi:", Object.keys(master).length);
-  } catch (err) {
-    console.error("Gagal preload barang:", err);
-  }
-}
-
-window.addEventListener("load", preloadBarang);
-
-function suggestBarang(query) {
-  query = (query || "").toLowerCase();
-  const master = load("masterBarang", {});
-  return Object.entries(master)
-    .map(([barcode, b]) => ({ barcode, ...b }))
-    .filter(b =>
-      b.barcode.toLowerCase().includes(query) ||
-      (b.nama || "").toLowerCase().includes(query)
-    )
-    .slice(0, 10); // batasi 10 hasil
-}
-
-// render dropdown suggestion
-function showSuggestions(inputEl, results) {
-  const box = document.getElementById(inputEl.id + "-suggestions");
-  if (!box) return;
-  
-  if (!results.length) {
-    box.classList.add("hidden");
-    return;
-  }
-
-  box.innerHTML = "";
-  results.forEach(item => {
-    const opt = document.createElement("div");
-    opt.className = "px-2 py-1 hover:bg-blue-100 cursor-pointer text-sm";
-    opt.textContent = `${item.barcode} — ${item.nama}`;
-    opt.onclick = () => {
-      inputEl.value = item.barcode;
-      box.classList.add("hidden");
-
-      if (inputEl.id === "quickBarcode") {
-        // 🔧 Alih-alih langsung handleScan,
-        // buka modal itemModal dan isi form
-        openModal("itemModal");
-        prefillFromMaster(item.barcode);
-      }
-      if (inputEl.id === "mBarcode") {
-        prefillFromMaster(item.barcode);
-      }
-    };
-    box.appendChild(opt);
-  });
-
-  box.classList.remove("hidden");
-} 
-
-
-
-document.getElementById("quickBarcode")?.addEventListener("input", e => {
-  const q = e.target.value.trim();
-  if (q.length < 2) return; // minimal 2 huruf
-  const hasil = suggestBarang(q);
-  showSuggestions(e.target, hasil);
-});
-
-document.getElementById("mBarcode")?.addEventListener("input", e => {
-  const q = e.target.value.trim();
-  if (q.length < 2) return;
-  const hasil = suggestBarang(q);
-  showSuggestions(e.target, hasil);
-});
-
-function enableKeyboardNav(inputEl) {
-  let selectedIndex = -1;
-
-  inputEl.addEventListener("keydown", e => {
-    const box = document.getElementById(inputEl.id + "-suggestions");
-    if (!box || box.classList.contains("hidden")) return;
-
-    const options = box.querySelectorAll("div");
-    if (!options.length) return;
-
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      selectedIndex = (selectedIndex + 1) % options.length;
-    }
-    if (e.key === "ArrowUp") {
-      e.preventDefault();
-      selectedIndex = (selectedIndex - 1 + options.length) % options.length;
-    }
-    if (e.key === "Enter") {
-      e.preventDefault();
-      if (selectedIndex >= 0 && selectedIndex < options.length) {
-        options[selectedIndex].click();
-        selectedIndex = -1;
-      }
-    }
-
-    // highlight pilihan
-    options.forEach((opt, i) => {
-      opt.classList.toggle("bg-blue-200", i === selectedIndex);
-    });
-  });
-
-  // reset index kalau user ketik ulang
-  inputEl.addEventListener("input", () => {
-    selectedIndex = -1;
-  });
-}
-
-// pasang di kedua input
-enableKeyboardNav(document.getElementById("quickBarcode"));
-enableKeyboardNav(document.getElementById("mBarcode"));
-
-    // ======= PRINTING =======
-    function generateNota(head, items, toko) {
-  const total = items.reduce((a,b)=> a + (b.qty*b.harga_jual - (b.potongan||0)), 0);
-
-  // gunakan client_tx_id → ambil 8 digit terakhir
-  const notaId = "TX-" + ((head.client_tx_id || "").slice(0,8).toUpperCase());
-
-  // baris item teks
-  const textLines = items.map(it => {
-    const sub = it.qty * it.harga_jual - (it.potongan || 0);
-    return `${it.qty}x ${it.nama} @${fmt(it.harga_jual)} = ${fmt(sub)}`;
-  });
-const tanggalStr = new Date(head.tanggal || head.tanggal_client).toLocaleString("id-ID");
-  // versi teks polos (untuk WA)
-  const text = [
-    (toko?.nama || "STRUK PENJUALAN"),
-    (toko?.alamat || ""),
-    `No: ${notaId}`,
-    tanggalStr,
-    "---------------------------",
-    ...textLines,
-    "---------------------------",
-    `TOTAL    : ${fmt(total)}`,
-    `BAYAR    : ${fmt(head.bayar)}`,
-    `KEMBALI  : ${fmt(head.kembalian)}`,
-    `METODE   : ${head.metode_bayar || ""}`,
-    "",
-    "Terima Kasih 🙏"
-  ].filter(Boolean).join("\n");
-
-  // versi HTML (untuk print 58mm)
-  const html = `
-  <div style="font-family: monospace; font-size:12px; width:100%; max-width:80mm; padding:8px; box-sizing:border-box;padding-bottom: 30px;">
-    <div style="text-align:center; font-weight:bold">${toko?.nama || "STRUK PENJUALAN"}</div>
-    ${toko?.alamat ? `<div style="text-align:center">${toko.alamat}</div>` : ""}
-    <hr/>
-    <div>No: ${notaId}</div>
-    <div>${tanggalStr}</div>
-    <hr/>
-
-    <table style="width:100%; border-collapse:collapse; font-size:12px">
-      <thead>
-        <tr>
-          <th style="text-align:left">Item</th>
-          <th style="text-align:right">Qty</th>
-          <th style="text-align:right">Harga</th>
-          <th style="text-align:right">Sub</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${items.map(it => {
-          const sub = it.qty * it.harga_jual - (it.potongan || 0);
-          return `
-            <tr>
-              <td style="text-align:left">${it.nama}</td>
-              <td style="text-align:right">${it.qty}</td>
-              <td style="text-align:right">${fmt(it.harga_jual)}</td>
-              <td style="text-align:right">${fmt(sub)}</td>
-            </tr>
-          `;
-        }).join("")}
-      </tbody>
-    </table>
-
-    <hr/>
-    <table style="width:100%; font-size:12px">
-      <tr><td>Total</td><td style="text-align:right">${fmt(total)}</td></tr>
-      <tr><td>Bayar</td><td style="text-align:right">${fmt(head.bayar)}</td></tr>
-      <tr><td>Kembali</td><td style="text-align:right">${fmt(head.kembalian)}</td></tr>
-      <tr><td>Metode</td><td style="text-align:right">${head.metode_bayar || ""}</td></tr>
-    </table>
-    <hr/>
-    <div style="text-align:center; margin-top:10px">Terima Kasih 🙏</div>
-    <div style="height:60px">@</div> 
-    <hr/>
-  </div>
-`;
-
-  return { html, text };
-}
-
-
-
-function printNota(trx, toko) {
-  const { html } = generateNota(trx, trx.items, toko); // ✅ universal generator
-  const w = window.open("", "nota");
-  w.document.write(`
-    <html>
-      <head>
-        <title>Nota</title>
-        <style>
-          body { font-family: monospace; font-size: 12px; }
-        </style>
-      </head>
-      <body>
-        ${html}
-        <script>
-          window.onload = function() {
-            window.print();
-            setTimeout(() => window.close(), 300);
-          }
-        <\/script>
-      </body>
-    </html>
-  `);
-  w.document.close();
-}
-
-    async function sendWa(tx, toko) {
-  try {
-    const sel = document.getElementById("payPembeli");
-    const opt = [...sel.options].find(o => o.value == tx.pembeli);
-    if (!opt) return;
-
-    // ambil nomor hp lebih aman dari atribut data-hp
-    let no_hp = opt.dataset.hp || "";
-    if (!no_hp && opt.text.includes("—")) {
-      no_hp = opt.text.split("—")[1].trim();
-    }
-    if (!/^62\d+$/.test(no_hp)) {
-      console.warn("Nomor WA tidak valid:", no_hp);
-      return;
-    }
-
-    // ✅ pakai generator universal
-    const { text } = generateNota(tx, tx.items, toko);
-
-    const res = await fetch("/api/send-wa", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ number: no_hp, message: text })
-    });
-    const js = await res.json();
-    console.log("WA result:", js);
-  } catch (err) {
-    console.error("Gagal kirim WA:", err);
-  }
-}
-
-    // ======= MODAL HANDLER =======
-    function isOpen(id) {
-        return document.getElementById(id)?.classList.contains('flex');
-    }
-
-    function openModal(id) {
-        const el = document.getElementById(id);
-        el.classList.remove('hidden');
-        el.classList.add('flex');
-        if (id === 'itemModal') {
-            setTimeout(() => document.getElementById('mBarcode')?.focus(), 50);
-        }
-        if (id === 'payModal') {
-            setTimeout(() => document.getElementById('payBayar')?.focus(), 50);
-        }
-        if (id === 'custModal') {
-            setTimeout(() => document.getElementById('cNama')?.focus(), 50);
-        } // ✅ fokus nama pembeli
-    }
-
-
-    function focusQuickBarcode() {
-        const q = document.getElementById("quickBarcode");
-        if (q) {
-            q.focus();
-            q.select(); // optional: biar teks lama langsung ketimpa
-        }
-    }
-
-    function closeModal(id) {
-        const el = document.getElementById(id);
-        if (el) {
-            el.classList.add("hidden");
-            el.classList.remove("flex");
-        }
-
-        // kalau modal item / modal bayar ditutup → balik ke quickBarcode
-        if (id === "itemModal" || id === "payModal") {
-            focusQuickBarcode();
-        }
-    }
-
-    function clearItemForm() {
-        document.getElementById('mBarcode').value = "";
-        document.getElementById('mNama').value = "";
-        document.getElementById('mHargaJual').value = "";
-        document.getElementById('mHargaBeli').value = "";
-        document.getElementById('mQty').value = 1;
-        document.getElementById('mBarcode').focus();
-    }
-
-    // ======= ITEM LOGIC =======
+</script>
+<script>
+    // ======= ITEM MODAL / LOGIC =======
     function prefillFromMaster(barcode) {
         const hit = master[barcode];
-        document.getElementById('mBarcode').value = barcode;
+        document.getElementById("mBarcode").value = barcode;
         if (hit) {
-            document.getElementById('mNama').value = hit.nama || "";
-            document.getElementById('mHargaJual').value = hit.harga_jual || "";
-            document.getElementById('mHargaBeli').value = hit.harga_beli || "";
+            document.getElementById("mNama").value = hit.nama || "";
+            document.getElementById("mHargaJual").value = hit.harga_jual || "";
+            document.getElementById("mHargaBeli").value = hit.harga_beli || "";
         } else {
-            document.getElementById('mNama').value = "";
-            document.getElementById('mHargaJual').value = "";
-            document.getElementById('mHargaBeli').value = "";
+            document.getElementById("mNama").value = "";
+            document.getElementById("mHargaJual").value = "";
+            document.getElementById("mHargaBeli").value = "";
         }
-        document.getElementById('mQty').value = 1;
-        document.getElementById('mQty').focus();
-        document.getElementById('mQty').select();
+        document.getElementById("mQty").value = 1;
+        document.getElementById("mQty").focus();
+        document.getElementById("mQty").select();
     }
 
     function commitItem() {
-        const barcode = (document.getElementById('mBarcode').value || "").trim();
+        const barcode = (document.getElementById("mBarcode").value || "").trim();
         if (!barcode) return;
-        const nama = (document.getElementById('mNama').value || "Barang");
-        const hj = parseInt(document.getElementById('mHargaJual').value || "0");
-        const hb = parseInt(document.getElementById('mHargaBeli').value || "0");
-        const qty = Math.max(1, parseInt(document.getElementById('mQty').value || "1"));
+        const nama = document.getElementById("mNama").value || "Barang";
+        const hj = parseInt(document.getElementById("mHargaJual").value || "0");
+        const hb = parseInt(document.getElementById("mHargaBeli").value || "0");
+        const qty = Math.max(1, parseInt(document.getElementById("mQty").value || "1"));
         const potongan = 0;
 
-        const ex = cart.find(i => i.barcode === barcode && i.harga_jual === hj);
+        const ex = cart.find((i) => i.barcode === barcode && i.harga_jual === hj);
         if (ex) {
             ex.qty += qty;
         } else {
-            cart.push({
-                barcode,
-                nama,
-                harga_jual: hj,
-                harga_beli: hb,
-                qty,
-                potongan
-            });
+            cart.push({ barcode, nama, harga_jual: hj, harga_beli: hb, qty, potongan });
         }
 
-        master[barcode] = {
-            nama,
-            harga_jual: hj,
-            harga_beli: hb
-        };
+        master[barcode] = { nama, harga_jual: hj, harga_beli: hb };
         save("masterBarang", master);
 
         renderCart();
         clearItemForm();
     }
-
-    async function handleScan(barcode, {openModalIfNew=false}={}) {
-        if (!barcode) return;
-
-        if (master[barcode]) {
-            // Barang sudah ada di cache lokal
-            const hit = master[barcode];
-            const ex = cart.find(i => i.barcode === barcode && i.harga_jual === hit.harga_jual);
-            if (ex) {
-            ex.qty += 1;
-            } else {
-            cart.push({
-                barcode,
-                nama: hit.nama || "Barang",
-                harga_jual: hit.harga_jual || 0,
-                harga_beli: hit.harga_beli || 0,
-                qty: 1,
-                potongan: 0
-            });
-            }
-            renderCart();
-
-        } else {
-            try {
-            // Ambil dari API v_barang_terbeli
-            const res = await fetch(`/api/barang/${encodeURIComponent(barcode)}`);
-            const barang = await res.json();
-
-            if (barang) {
-                // simpan ke master agar next scan lebih cepat
-                master[barcode] = {
-                nama: barang.nama,
-                harga_jual: barang.harga_jual,
-                harga_beli: barang.harga_beli
-                };
-
-                cart.push({
-                barcode,
-                nama: barang.nama || "Barang",
-                harga_jual: barang.harga_jual || 0,
-                harga_beli: barang.harga_beli || 0,
-                qty: 1,
-                potongan: 0
-                });
-                renderCart();
-            } else {
-                // Barang tidak ditemukan di DB
-                if (openModalIfNew) {
-                openModal('itemModal');
-                }
-                prefillFromMaster(barcode); // biar tetap isi barcode ke modal
-            }
-            } catch (err) {
-            console.error("Gagal fetch barang:", err);
-            if (openModalIfNew) {
-                openModal('itemModal');
-            }
-            prefillFromMaster(barcode);
-            }
-        }
-        }
-
-
-
-
-
-    // ===== Customers (offline-first) =====
-    function upsertPayPembeliOption(idValue, labelText, selectEl) {
-        const opt = document.createElement("option");
-        opt.value = idValue;
-        opt.text = labelText;
-        selectEl.add(opt);
-        selectEl.value = idValue;
-    }
-
+ 
+    // ======= CUSTOMERS (PEMBELI) =======
     function loadLocalCustomers() {
         return JSON.parse(localStorage.getItem("localCustomers") || "[]");
     }
@@ -606,127 +401,126 @@ function printNota(trx, toko) {
         localStorage.setItem("localCustomers", JSON.stringify(list));
     }
 
-    // On page load, render any locally saved customers (so they show up even before server sync)
-    (function hydrateLocalCustomersIntoSelect() {
-        const sel = document.getElementById("payPembeli");
-        const locals = loadLocalCustomers();
-
-        for (const c of locals) {
-            // gunakan local temp id prefiks untuk hindari bentrok
-            const idVal = c.server_id ? String(c.server_id) : `local:${c.temp_id}`;
-
-            // hindari duplikasi kalau server sudah render opsi dengan id yang sama
-            if (![...sel.options].some(o => o.value === idVal)) {
-                const opt = document.createElement("option");
-                opt.value = idVal;
-                opt.text = `${c.nama} — ${c.no_hp || ""}`;
-                if (c.no_hp) {
-                    opt.dataset.hp = c.no_hp;   // ✅ simpan nomor hp di atribut
-                }
-                sel.add(opt);
-            }
-        }
-    })();
-
-
-    function saveCustomer() {
-    const nama = document.getElementById("cNama").value.trim();
-    const no_hp = document.getElementById("cHp").value.trim();
-    const alamat = document.getElementById("cAlamat").value.trim();
-
-    if (!nama) {
-        alert("Nama wajib diisi");
-        return;
-    }
-    if (!no_hp) {
-        alert("Nomor HP wajib diisi");
-        return;
+    function upsertPayPembeliOption(idValue, labelText, selectEl) {
+        const opt = document.createElement("option");
+        opt.value = idValue;
+        opt.text = labelText;
+        selectEl.add(opt);
+        selectEl.value = idValue;
     }
 
-    const temp_id = generateUUID();
-    let locals = JSON.parse(localStorage.getItem("localCustomers") || "[]");
-    const record = {
-        temp_id,
-        server_id: null,
-        nama,
-        no_hp,
-        alamat
-    };
-    locals.push(record);
-    localStorage.setItem("localCustomers", JSON.stringify(locals));
-
-    // tambahkan ke dropdown & pilihkan
+    function populatePembeliSelect(serverList = []) {
     const sel = document.getElementById("payPembeli");
-    const opt = document.createElement("option");
-    opt.value = `local:${temp_id}`;
-    opt.text = `${nama} — ${no_hp}`;
-    opt.dataset.hp = no_hp;   // ✅ simpan nomor hp di atribut
-    sel.add(opt);
-    sel.value = opt.value;
+    if (!sel) return;
 
-    // tutup modal & bersihkan
-    closeModal('custModal');
-    document.getElementById("cNama").value = "";
-    document.getElementById("cHp").value = "";
-    document.getElementById("cAlamat").value = "";
+    const locals = loadLocalCustomers();
+    const map = new Map();
 
-    focusPayAmount();
+    // gabung server + lokal
+    serverList.forEach((p) => {
+        const id = String(p.id);
+        map.set(id, { value: id, nama: p.nama, no_hp: p.no_hp || "" });
+    });
+    locals.forEach((c) => {
+        const id = c.server_id ? String(c.server_id) : `local:${c.temp_id}`;
+        map.set(id, { value: id, nama: c.nama, no_hp: c.no_hp || "" });
+    });
 
-    // sync ke server jika online -> ganti value option menjadi ID server
-    if (navigator.onLine) {
-        fetch("/api/sync-pembeli", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ nama, no_hp, alamat })
-        })
-        .then(r => r.json())
-        .then(js => {
-            if (js.status === "ok" && js.id) {
-                // update local storage
-                locals = JSON.parse(localStorage.getItem("localCustomers") || "[]");
-                const idx = locals.findIndex(x => x.temp_id === temp_id);
-                if (idx !== -1) {
-                    locals[idx].server_id = js.id;
-                    localStorage.setItem("localCustomers", JSON.stringify(locals));
-                }
-                // ganti value option di dropdown
-                for (const o of sel.options) {
-                    if (o.value === `local:${temp_id}`) {
-                        o.value = String(js.id);
-                        o.dataset.hp = no_hp;  // ✅ pastikan tetap ada data-hp setelah sync
-                        break;
-                    }
-                }
-            }
-        })
-        .catch(err => console.error("Sync pembeli gagal:", err));
-    }
+    const arr = Array.from(map.values()).sort((a, b) =>
+        a.nama.localeCompare(b.nama, "id")
+    );
+
+    populateSelect(
+        sel,
+        arr,
+        (o) => o.value,
+        (o) => `${o.nama}${o.no_hp ? " — " + o.no_hp : ""}`,
+        (o, opt) => { if (o.no_hp) opt.dataset.hp = o.no_hp; },
+        "(Tanpa pembeli)"
+    );
 }
 
 
+    function addCustomerOptionToSelect(customer, selectEl) {
+        const id = customer.server_id ? String(customer.server_id) : `local:${customer.temp_id}`;
+        const opt = document.createElement("option");
+        opt.value = id;
+        opt.text = `${customer.nama} — ${customer.no_hp}`;
+        if (customer.no_hp) opt.dataset.hp = customer.no_hp;
+        selectEl.add(opt);
+        selectEl.value = id;
+    }
 
-    // pasang shortcut enter/esc khusus modal pembeli (tidak men-trigger yang lain)
-    (function wireCustomerModalKeys() {
-        const cust = document.getElementById('custModal');
-        if (!cust) return;
+    function syncCustomerWithServer(temp_id, data, selectEl) {
+        fetch("/api/sync-pembeli", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(data),
+        })
+            .then((r) => r.json())
+            .then((js) => {
+                if (js.status === "ok" && js.id) {
+                    let locals = loadLocalCustomers();
+                    const idx = locals.findIndex((x) => x.temp_id === temp_id);
+                    if (idx !== -1) {
+                        locals[idx].server_id = js.id;
+                        saveLocalCustomers(locals);
+                    }
+                    for (const o of selectEl.options) {
+                        if (o.value === `local:${temp_id}`) {
+                            o.value = String(js.id);
+                            o.dataset.hp = data.no_hp;
+                            break;
+                        }
+                    }
+                }
+            })
+            .catch((err) => console.error("Sync pembeli gagal:", err));
+    }
 
-        cust.addEventListener('keydown', (e) => {
-            if (!isOpen('custModal')) return; // hanya saat modal pembeli terbuka
+    function saveCustomer() {
+        const nama = document.getElementById("cNama").value.trim();
+        const no_hp = document.getElementById("cHp").value.trim();
+        const alamat = document.getElementById("cAlamat").value.trim();
 
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                e.stopPropagation(); // ✅ cegah tembus ke listener global
-                saveCustomer();
-            }
-            if (e.key === 'Escape') {
-                e.preventDefault();
-                e.stopPropagation(); // ✅ cegah tembus ke listener global
-                closeModal('custModal');
-                focusPayAmount();
-            }
-        });
-    })();
-    // ======= BAYAR =======
+        if (!nama) return alert("Nama wajib diisi");
+        if (!no_hp) return alert("Nomor HP wajib diisi");
+
+        const temp_id = generateUUID();
+        const record = { temp_id, server_id: null, nama, no_hp, alamat };
+
+        let locals = loadLocalCustomers();
+        locals.push(record);
+        saveLocalCustomers(locals);
+
+        const sel = document.getElementById("payPembeli");
+        addCustomerOptionToSelect(record, sel);
+
+        closeModal("custModal");
+        document.getElementById("cNama").value = "";
+        document.getElementById("cHp").value = "";
+        document.getElementById("cAlamat").value = "";
+        focusPayAmount();
+
+        if (navigator.onLine) {
+            syncCustomerWithServer(temp_id, { nama, no_hp, alamat }, sel);
+        }
+    }
+
+    async function refreshPembeliOptions() {
+        try {
+            const res = await fetch("/api/pembeli");
+            if (!res.ok) throw new Error("HTTP " + res.status);
+            const serverList = await res.json();
+            populatePembeliSelect(serverList);
+        } catch (err) {
+            console.warn("Gagal load pembeli dari server, pakai lokal saja:", err);
+            populatePembeliSelect([]);
+        }
+    }
+
+
+    // ======= PEMBAYARAN =======
     async function openPaymentModal() {
         if (cart.length === 0) {
             alert("Keranjang kosong.");
@@ -736,76 +530,76 @@ function printNota(trx, toko) {
         await refreshPembeliOptions();
 
         const total = cart.reduce((a, b) => a + b.qty * b.harga_jual - (b.potongan || 0), 0);
-        document.getElementById('payTotal').textContent = fmt(total);
+        document.getElementById("payTotal").textContent = fmt(total);
 
-        const sel = document.getElementById('payPembeli');
-        // jika belum ada pilihan, pilih opsi pertama yang punya value (bukan placeholder kosong)
+        const sel = document.getElementById("payPembeli");
         if (!sel.value || sel.value === "") {
-            const firstReal = [...sel.options].find(o => (o.value ?? "") !== "");
+            const firstReal = [...sel.options].find((o) => (o.value ?? "") !== "");
             if (firstReal) sel.value = firstReal.value;
         }
-        document.getElementById('payBayar').value = "";
-        document.getElementById('payKembalian').textContent = fmt(0);
-        openModal('payModal');
 
-        const bayarEl = document.getElementById('payBayar');
-        const kembalianEl = document.getElementById('payKembalian');
+        document.getElementById("payBayar").value = "";
+        document.getElementById("payKembalian").textContent = fmt(0);
 
+        // tombol selesai default disabled
+        const btnSelesai = document.getElementById("btnSelesai");
+        if (btnSelesai) btnSelesai.disabled = true;
 
-        // kembalian otomatis
-        const totalNow = total; // lock total untuk handler ini
+        openModal("payModal");
+
+        const bayarEl = document.getElementById("payBayar");
+        const kembalianEl = document.getElementById("payKembalian");
+
+        const totalNow = total;
         bayarEl.oninput = () => {
             const bayar = parseInt(bayarEl.value || "0", 10);
             const k = bayar - totalNow;
             kembalianEl.textContent = fmt(k);
             kembalianEl.className = "font-semibold " + (k < 0 ? "text-red-600" : "text-emerald-600");
+
+            // ✅ enable btnSelesai kalau kembalian >= 0
+            if (btnSelesai) btnSelesai.disabled = k < 0;
         };
 
-        // ENTER di kolom bayar -> langsung selesai
         bayarEl.onkeydown = (e) => {
-            if (e.key === 'Enter') {
+            if (e.key === "Enter") {
                 e.preventDefault();
-                finishPayment();
+                if (!btnSelesai.disabled) {
+                    finishPayment();
+                }
             }
         };
 
-        // jaga-jaga: ENTER di mana pun dalam payModal juga memicu bayar
-        const payModal = document.getElementById('payModal');
+        const payModal = document.getElementById("payModal");
         const handleEnter = (e) => {
-            if (e.key === 'Enter') {
+            if (e.key === "Enter") {
                 e.preventDefault();
-                finishPayment();
+                if (!btnSelesai.disabled) {
+                    finishPayment();
+                }
             }
         };
-        payModal.addEventListener('keydown', handleEnter, {
-            once: true
-        });
+        payModal.addEventListener("keydown", handleEnter, { once: true });
     }
 
-
-
-
-
-
-
     function focusPayAmount() {
-        // fokuskan ke input nominal bayar jika payModal masih terbuka
-        const el = document.getElementById('payBayar');
-        if (document.getElementById('payModal')?.classList.contains('flex') && el) {
+        const el = document.getElementById("payBayar");
+        if (document.getElementById("payModal")?.classList.contains("flex") && el) {
             setTimeout(() => el.focus(), 30);
         }
     }
 
     function finishPayment() {
-        const total = cart.reduce((a, b) => a + Math.max(0, b.qty) * Math.max(0, b.harga_jual) - Math.max(0, b.potongan || 0), 0);
-        const bayar = parseInt(document.getElementById('payBayar').value || "0", 10);
-        const metode = document.getElementById('payMetode').value;
-        const selVal = document.getElementById('payPembeli').value;
-        const pembeli_id = getNumericIdOrNull(selVal); // null kalau "local:..."
-
+        const total = cart.reduce(
+            (a, b) => a + Math.max(0, b.qty) * Math.max(0, b.harga_jual) - Math.max(0, b.potongan || 0),
+            0
+        );
+        const bayar = parseInt(document.getElementById("payBayar").value || "0", 10);
+        const metode = document.getElementById("payMetode").value;
+        const selVal = document.getElementById("payPembeli").value;
+        const pembeli_id = getNumericIdOrNull(selVal);
         const kembalian = bayar - total;
 
-        // ambil toko_id dari atribut body (dibawa server-side saat render)
         const tokoId = parseInt(document.body.dataset.tokoId || "0", 10);
 
         const tx = {
@@ -814,162 +608,80 @@ function printNota(trx, toko) {
             metode_bayar: metode,
             bayar,
             kembalian,
-            pembeli: pembeli_id, // null atau integer
-            toko_id: tokoId,     // ✅ penting untuk backend
-            items: cart.map(it => ({
+            pembeli: pembeli_id,
+            toko_id: tokoId,
+            items: cart.map((it) => ({
                 barcode: it.barcode,
                 nama: it.nama,
                 qty: Math.max(0, it.qty),
                 harga_jual: Math.max(0, it.harga_jual),
                 harga_beli: Math.max(0, it.harga_beli),
-                potongan: Math.max(0, it.potongan || 0)
-            }))
+                potongan: Math.max(0, it.potongan || 0),
+            })),
         };
 
-        // simpan transaksi offline
         let allTx = load("transactions", []);
         allTx.push(tx);
         save("transactions", allTx);
 
-        // reset keranjang
         cart = [];
         renderCart();
-        closeModal('payModal');
+        closeModal("payModal");
         alert("✅ Transaksi tersimpan offline. Siap disinkronkan saat online.");
 
-        // kirim WA jika ada pembeli
         if (tx.pembeli) {
             sendWa(tx, {
                 nama: document.body.dataset.tokoNama || "",
-                alamat: document.body.dataset.tokoAlamat || ""
+                alamat: document.body.dataset.tokoAlamat || "",
             });
         }
-        // cetak struk
+
         printNota(tx, {
             nama: document.body.dataset.tokoNama || "",
-            alamat: document.body.dataset.tokoAlamat || ""
+            alamat: document.body.dataset.tokoAlamat || "",
         });
-        // sync otomatis kalau online
+
         if (navigator.onLine) {
             syncOfflineData();
         }
     }
+</script>
+<script>
+    // ======= SINKRONISASI OFFLINE =======
 
-    function generateUUID() {
-        if (crypto?.randomUUID) {
-            return crypto.randomUUID();
+    async function sendWa(tx, toko) {
+        // ambil nomor hp dari option pembeli
+        const pembeliOpt = document.querySelector(`#payPembeli option[value="${tx.pembeli}"]`);
+        const hp = pembeliOpt?.dataset.hp || "";
+        if (!hp) {
+            alert("Nomor HP pembeli tidak ditemukan");
+            return;
         }
-        // fallback: UUID v4 pseudo
-        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-            const r = Math.random() * 16 | 0;
-            const v = c === 'x' ? r : (r & 0x3 | 0x8);
-            return v.toString(16);
-        });
-        }
-    function rebuildPembeliSelect(serverList) {
-        const sel = document.getElementById("payPembeli");
-        if (!sel) return;
 
-        const prev = sel.value;
-        const locals = loadLocalCustomers();
+        // generate nota
+        const s = generateNotaWA(tx, tx.items, toko).replace(/<[^>]+>/g, "");
 
-        const map = new Map();
-
-        // server-side pembeli
-        (serverList || []).forEach(p => {
-            const id = String(p.id);
-            map.set(id, {
-                value: id,
-                label: `${p.nama} — ${p.no_hp||""}`.trim(),
-                no_hp: p.no_hp || ""
-            });
-        });
-
-        // pembeli lokal (offline)
-        locals.forEach(c => {
-            if (c.server_id) {
-                const id = String(c.server_id);
-                map.set(id, {
-                    value: id,
-                    label: `${c.nama} — ${c.no_hp||""}`.trim(),
-                    no_hp: c.no_hp || ""
-                });
-            } else {
-                const id = `local:${c.temp_id}`;
-                map.set(id, {
-                    value: id,
-                    label: `${c.nama} — ${c.no_hp||""}`.trim(),
-                    no_hp: c.no_hp || ""
-                });
-            }
-        });
-
-        // render ulang
-        sel.innerHTML = "";
-        sel.insertAdjacentHTML("beforeend", `<option value="">(Tanpa pembeli)</option>`);
-
-        const arr = Array.from(map.values()).sort((a, b) => a.label.localeCompare(b.label, 'id'));
-        arr.forEach(o => {
-            const opt = document.createElement("option");
-            opt.value = o.value;
-            opt.text = o.label;
-            if (o.no_hp) {
-                opt.dataset.hp = o.no_hp;  // ✅ simpan nomor hp di atribut
-            }
-            sel.add(opt);
-        });
-
-        if (prev && [...sel.options].some(o => o.value === prev)) {
-            sel.value = prev;
-        } else {
-            const firstReal = [...sel.options].find(o => (o.value ?? "") !== "");
-            if (firstReal) sel.value = firstReal.value;
-        }
-    }
-
-
-    async function refreshPembeliOptions() {
         try {
-            const res = await fetch("/api/pembeli");
-            if (!res.ok) throw new Error("HTTP " + res.status);
-            const serverList = await res.json(); // [{id,nama,no_hp}]
-            rebuildPembeliSelect(serverList);
+            const res = await fetch("/api/send-wa", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    number: hp,    // ✅ sesuai backend
+                    message: s     // ✅ sesuai backend
+                }),
+            });
+            const js = await res.json();
+            if (js.status === "sent") {
+                console.log("✅ WA terkirim");
+            } else {
+                console.warn("⚠️ Gagal kirim WA:", js);
+                alert("WA gagal dikirim, coba manual.");
+            }
         } catch (err) {
-            console.warn("Gagal load pembeli dari server, pakai lokal saja:", err);
-            rebuildPembeliSelect([]); // tetap render dari lokal
+            console.error("⚠️ Error sendWa:", err);
+            alert("Tidak bisa kirim WA");
         }
     }
-
-    //  function finishPayment(){
-    //    const total = cart.reduce((a,b)=>a + b.qty*b.harga_jual - (b.potongan||0), 0);
-    //    const bayar = parseInt(document.getElementById('payBayar').value||"0");
-    //    const metode = document.getElementById('payMetode').value;
-    //    const pembeli_id = document.getElementById('payPembeli').value || null;
-    //    const kembalian = bayar - total;
-
-    //    let tx = load("transactions", []);
-    //    tx.push({
-    //      client_tx_id: generateUUID(),
-    //      tanggal_client: new Date().toISOString(),
-    //      metode_bayar: metode,
-    //      bayar, kembalian,
-    //      pembeli: pembeli_id ? parseInt(pembeli_id) : null,
-    //      items: cart
-    //    });
-    //    save("transactions", tx);
-
-    //    cart = [];
-    //    renderCart();
-    //    closeModal('payModal');
-    //    alert("✅ Transaksi tersimpan offline. Siap disinkronkan saat online.");
-
-    // TODO: panggil fungsi sync otomatis kalau online
-    //    if(navigator.onLine){
-    //      syncOfflineData();
-    //    }
-    //  }
-
-    // ======= SYNC =======
     async function syncOfflineData() {
         let tx = load("transactions", []);
         if (tx.length === 0) return;
@@ -993,76 +705,156 @@ function printNota(trx, toko) {
         }
     }
 
-    window.addEventListener('online', syncOfflineData);
+    // ======= MODAL HANDLING =======
 
-    // ======= SHORTCUTS =======
-    document.addEventListener('keydown', (e) => {
-        if (e.key === '+') {
-            e.preventDefault();
-            openModal('itemModal');
+    function isOpen(id) {
+        return document.getElementById(id)?.classList.contains("flex");
+    }
+
+    const modalFocusMap = {
+        itemModal: "mBarcode",
+        payModal: "payBayar",
+        custModal: "cNama"
+    };
+
+    function openModal(id) {
+        const el = document.getElementById(id);
+        if (el) {
+            el.classList.remove("hidden");
+            el.classList.add("flex");
+            setTimeout(() => {
+                const focusId = modalFocusMap[id];
+                if (focusId) document.getElementById(focusId)?.focus();
+            }, 30);
         }
-        if (e.key === 'F2') {
-            e.preventDefault();
-            openPaymentModal();
+    }
+
+
+    function closeModal(id) {
+        const el = document.getElementById(id);
+        if (el) {
+            el.classList.add("hidden");
+            el.classList.remove("flex");
         }
-        if (e.key === 'Escape') {
-            closeModal('itemModal');
-            closeModal('payModal');
-            closeModal('custModal'); // ✅
-        }
+    }
 
-        
-  if (e.key === 'Enter' && document.activeElement.id === 'quickBarcode') {
-      e.preventDefault();
-      const bc = document.getElementById('quickBarcode').value.trim();
-      if (!bc) return;
-      document.getElementById('quickBarcode').value = "";
+    function focusQuickBarcode() {
+        setTimeout(() => {
+            document.getElementById("quickBarcode")?.focus();
+        }, 30);
+    }
+       
 
-      const master = load("masterBarang", {});
-      if (master[bc]) {
-        // langsung masuk cart
-        handleScan(bc);
-      } else {
-        // buka modal untuk input manual
-        openModal("itemModal");
-        prefillFromMaster(bc);
-      }
-  }
+    function wireModalKeys(modalId, { onEnter, onEscape }) {
+        const modal = document.getElementById(modalId);
+        if (!modal) return;
 
-        if (e.key === 'Enter' && isOpen('payModal') && !isOpen('custModal')) { // ✅ abaikan kalau custModal terbuka
-            if (document.activeElement.id !== 'payBayar') {
+        modal.addEventListener("keydown", (e) => {
+            if (!isOpen(modalId)) return;
+
+            if (e.key === "Enter" && onEnter) {
                 e.preventDefault();
-                finishPayment();
+                e.stopPropagation();
+                onEnter();
+            }
+            if (e.key === "Escape" && onEscape) {
+                e.preventDefault();
+                e.stopPropagation();
+                onEscape();
+            }
+        });
+    }
+
+    // Pemakaian:
+    wireModalKeys("itemModal", {
+        onEnter: () => {
+            // 🚫 Kalau fokus masih di input mBarcode → jangan commit dulu
+            if (document.activeElement.id === "mBarcode") {
+                return; // biarkan enableKeyboardNav yang handle
+            }
+            commitItem(); // ✅ commit hanya jika bukan di mBarcode
+        },
+        onEscape: () => { 
+            closeModal("itemModal"); 
+            focusQuickBarcode(); 
+        }
+    });
+
+    wireModalKeys("custModal", {
+        onEnter: () => saveCustomer(),
+        onEscape: () => { closeModal("custModal"); focusPayAmount(); }
+    });
+
+    // ======= INISIALISASI & SHORTCUTS =======
+ 
+    // Tambah barang (shortcut: +)
+    registerShortcut("+", () => {
+        openModal("itemModal");
+        document.getElementById("mBarcode")?.focus();
+    });
+
+    // Bayar (shortcut: F2)
+    registerShortcut("F2", openPaymentModal);
+
+    // Tutup modal (shortcut: Escape)
+    registerShortcut("Escape", () => {
+        if (isOpen("itemModal")) {
+            closeModal("itemModal"); focusQuickBarcode();
+        } else if (isOpen("payModal")) {
+            closeModal("payModal"); focusQuickBarcode();
+        } else if (isOpen("custModal")) {
+            closeModal("custModal"); focusQuickBarcode();
+        }
+    });
+    
+    document.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && document.activeElement.id === "quickBarcode") {
+            e.preventDefault();
+            const val = document.getElementById("quickBarcode").value.trim();
+            if (val) {
+                document.getElementById("quickBarcode").value = "";
+                handleQuickBarcodeInput(val);
             }
         }
-if (e.key === 'Enter' && document.getElementById('itemModal').classList.contains('flex')) {
-  if (document.activeElement.id === 'mBarcode') {
-    e.preventDefault();
-    const bc = document.getElementById('mBarcode').value.trim();
-    if (!bc) return;
+    });
+    
+    (function setupQuickBarcodeAutoCheck() {
+        const inp = document.getElementById("quickBarcode");
+        if (!inp) return;
 
-    console.log("Enter pada mBarcode, hanya isi field modal (tidak update cart)");
+        let typingTimer;
+        const doneTypingDelay = 300; // ms
 
-    // hanya isi field modal, tidak panggil handleScan/cart update
-    prefillFromMaster(bc);
+        
+        inp.addEventListener("input", () => {
+            clearTimeout(typingTimer);
+            const val = inp.value.trim();
+            if (!val) return;
 
-  } else {
-    e.preventDefault();
-    console.log("Enter di modal tapi bukan di mBarcode → commitItem()");
-    commitItem();
-  }
-}
+            typingTimer = setTimeout(() => {
+                handleQuickBarcodeInput(val);
+                inp.value = "";
+            }, doneTypingDelay);
+        });
+    })();
+    
+    // Tombol tambah barang
+    document.getElementById("btnTambah")?.addEventListener("click", () => {
+        openModal("itemModal");
+        document.getElementById("mBarcode").focus();
     });
 
-
-
-// ======= INIT =======
-document.getElementById('btnTambah').onclick = () => openModal('itemModal');
-document.getElementById('btnBayar').onclick = openPaymentModal;
-renderCart();
-syncOfflineData();
-    document.addEventListener("DOMContentLoaded", () => {
-    const q = document.getElementById("quickBarcode");
-    if (q) q.focus();
+    // Tombol bayar
+    document.getElementById("btnBayar")?.addEventListener("click", () => {
+        openPaymentModal();
     });
+
+    // Sync otomatis saat online
+    window.addEventListener("online", syncOfflineData);
+
+    // Init awal
+    renderCart();
+    syncOfflineData();
+    focusQuickBarcode();
+    clearItemForm()
 </script>
