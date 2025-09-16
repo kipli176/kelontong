@@ -30,17 +30,21 @@
       <div class="flex gap-2 mb-3">
         <button id="tabTransaksi" class="px-3 py-2 rounded bg-slate-200">Transaksi</button>
         <button id="tabDetail" class="px-3 py-2 rounded">Detail Barang</button>
-        <div class="ml-auto flex gap-2">
-          <button id="btnPrint" class="px-3 py-2 bg-slate-600 text-white rounded text-sm">🖨 Print</button>
-          <a id="btnExport" href="{{ url_for('export_hari_ini_xlsx') }}"
-            class="px-3 py-2 bg-emerald-600 text-white rounded text-sm">⬇️ Export Excel</a>
-        </div>
       </div>
 
       <!-- ===================== -->
       <!-- TAB TRANSAKSI (lama) -->
       <!-- ===================== -->
       <div id="paneTransaksi">
+        <div class="flex justify-between mb-2">
+          <h3 class="font-semibold">Transaksi Hari Ini</h3>
+          <div class="flex gap-2">
+            <button onclick="window.open('{{ url_for('print_transaksi_hari_ini') }}','_blank')"
+              class="px-3 py-2 bg-slate-600 text-white rounded text-sm">🖨 Print</button>
+            <a href="{{ url_for('export_hari_ini_xlsx') }}"
+              class="px-3 py-2 bg-emerald-600 text-white rounded text-sm">⬇️ Export Excel</a>
+          </div>
+        </div>
         <div class="border rounded overflow-auto">
           <table class="w-full text-sm">
             <thead class="bg-slate-100 sticky top-0">
@@ -59,8 +63,8 @@
               {% set ns = namespace(gtotal=0, glaba=0, gitem=0) %}
               {% for id, tgl, tx8, nama, hp, metode, total, laba, jml_item in rows %}
               {% set ns.gtotal = ns.gtotal + (total or 0) %}
-              {% set ns.glaba  = ns.glaba + (laba or 0) %}
-              {% set ns.gitem  = ns.gitem + (jml_item or 0) %}
+              {% set ns.glaba = ns.glaba + (laba or 0) %}
+              {% set ns.gitem = ns.gitem + (jml_item or 0) %}
               <tr class="odd:bg-white even:bg-slate-50">
                 <td class="p-2 border whitespace-nowrap">{{ tgl.strftime("%H:%M:%S") }}</td>
                 <td class="p-2 border font-mono">TX-{{ tx8|upper }}</td>
@@ -72,10 +76,10 @@
                 <td class="p-2 border">
                   <div class="flex items-center gap-2">
                     <button class="px-2 py-1 bg-emerald-600 text-white rounded text-xs"
-                            onclick="printById({{ id }}, toko)">🧾 Cetak Ulang</button>
+                      onclick="printById({{ id }}, toko)">🧾 Cetak Ulang</button>
                     {% if hp %}
                     <button class="px-2 py-1 bg-blue-600 text-white rounded text-xs"
-                            onclick="waById({{ id }}, '{{ nama|e }}', '{{ hp|e }}', toko)">📲 Kirim WA</button>
+                      onclick="waById({{ id }}, '{{ nama|e }}', '{{ hp|e }}', toko)">📲 Kirim WA</button>
                     {% endif %}
                   </div>
                 </td>
@@ -103,6 +107,15 @@
       <!-- TAB DETAIL BARANG (baru) -->
       <!-- ======================= -->
       <div id="paneDetail" class="hidden">
+        <div class="flex justify-between mb-2">
+          <h3 class="font-semibold">Detail Barang Hari Ini</h3>
+          <div class="flex gap-2">
+            <button onclick="window.open('{{ url_for('print_detail_hari_ini') }}','_blank')"
+              class="px-3 py-2 bg-slate-600 text-white rounded text-sm">🖨 Print</button>
+            <a href="{{ url_for('export_detail_hari_ini_xlsx') }}"
+              class="px-3 py-2 bg-emerald-600 text-white rounded text-sm">⬇️ Export Excel</a>
+          </div>
+        </div>
         <div class="border rounded overflow-auto">
           <table class="w-full text-sm">
             <thead class="bg-slate-100 sticky top-0">
@@ -121,8 +134,8 @@
               {% set nd = namespace(gtotal=0, glaba=0, gqty=0) %}
               {% for tx8, tgl, pembeli, hp, barcode, item, qty, hj, sub, laba in detail_rows %}
               {% set nd.gtotal = nd.gtotal + (sub or 0) %}
-              {% set nd.glaba  = nd.glaba + (laba or 0) %}
-              {% set nd.gqty   = nd.gqty + (qty or 0) %}
+              {% set nd.glaba = nd.glaba + (laba or 0) %}
+              {% set nd.gqty = nd.gqty + (qty or 0) %}
               <tr class="odd:bg-white even:bg-slate-50">
                 <td class="p-2 border">{{ tgl.strftime("%H:%M:%S") }}</td>
                 <td class="p-2 border">TX-{{ tx8|upper }}</td>
@@ -156,7 +169,8 @@
 
   <!-- Footer shortcut (konsisten) -->
   <footer class="bg-slate-200 text-slate-700 text-sm p-2 text-center">
-    Shortcut: <kbd class="px-1">F5</kbd> refresh, untuk cetak ulang atau kirim WA, klik tombol pada baris transaksi yang diinginkan.
+    Shortcut: <kbd class="px-1">F5</kbd> refresh, untuk cetak ulang atau kirim WA, klik tombol pada baris transaksi yang
+    diinginkan.
     halaman, <a href="{{ url_for('kasir') }}" class="underline">Kembali ke Kasir</a>
   </footer>
   <script src="/static/js/esc-pos-encoder.umd.min.js"></script>
@@ -164,31 +178,31 @@
   <script src="/static/js/nota-utils.js"></script>
   <script src="/static/js/app.js"></script>
 
-  
-  <script>
-  const tabT = document.getElementById('tabTransaksi');
-  const tabD = document.getElementById('tabDetail');
-  const paneT = document.getElementById('paneTransaksi');
-  const paneD = document.getElementById('paneDetail');
-  const btnPrint = document.getElementById('btnPrint');
-  const btnExport = document.getElementById('btnExport');
 
-  function activate(tab){
-    if(tab==='transaksi'){
-      paneT.classList.remove('hidden'); paneD.classList.add('hidden');
-      tabT.classList.add('bg-slate-200'); tabD.classList.remove('bg-slate-200');
-      btnExport.href = "{{ url_for('export_hari_ini_xlsx') }}";
-      btnPrint.onclick = ()=>window.print();  // print transaksi
-    } else {
-      paneD.classList.remove('hidden'); paneT.classList.add('hidden');
-      tabD.classList.add('bg-slate-200'); tabT.classList.remove('bg-slate-200');
-      btnExport.href = "{{ url_for('export_detail_hari_ini_xlsx') }}";
-      btnPrint.onclick = ()=>window.print();  // print detail
+  <script>
+    const tabT = document.getElementById('tabTransaksi');
+    const tabD = document.getElementById('tabDetail');
+    const paneT = document.getElementById('paneTransaksi');
+    const paneD = document.getElementById('paneDetail');
+    const btnPrint = document.getElementById('btnPrint');
+    const btnExport = document.getElementById('btnExport');
+
+    function activate(tab) {
+      if (tab === 'transaksi') {
+        paneT.classList.remove('hidden'); paneD.classList.add('hidden');
+        tabT.classList.add('bg-slate-200'); tabD.classList.remove('bg-slate-200');
+        btnExport.href = "{{ url_for('export_hari_ini_xlsx') }}";
+        btnPrint.onclick = () => window.print();  // print transaksi
+      } else {
+        paneD.classList.remove('hidden'); paneT.classList.add('hidden');
+        tabD.classList.add('bg-slate-200'); tabT.classList.remove('bg-slate-200');
+        btnExport.href = "{{ url_for('export_detail_hari_ini_xlsx') }}";
+        btnPrint.onclick = () => window.print();  // print detail
+      }
     }
-  }
-  tabT.onclick=()=>activate('transaksi');
-  tabD.onclick=()=>activate('detail');
-  activate('transaksi');
+    tabT.onclick = () => activate('transaksi');
+    tabD.onclick = () => activate('detail');
+    activate('transaksi');
   </script>
   <!-- Script: cetak & WA -->
   <script>
@@ -248,7 +262,7 @@
         alert("Gagal kirim WA: " + e.message);
       }
     }
- 
+
 
   </script>
 </body>

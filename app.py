@@ -261,10 +261,12 @@ def register():
 @app.route("/penjualan-hari-ini")
 @login_required
 def penjualan_hari_ini():
-    """Tabel ringkas penjualan hari ini."""
+    """Halaman tab Transaksi & Detail barang hari ini."""
     user = get_current_user()
     conn = get_db()
     cur = conn.cursor()
+
+    # ambil transaksi ringkas per nota
     cur.execute("""
         SELECT id, tanggal, tx8, nama, no_hp, metode_bayar, total, laba, jml_item
         FROM v_penjualan_hari_ini
@@ -273,9 +275,68 @@ def penjualan_hari_ini():
         ORDER BY tanggal DESC
     """, (user["toko"]["id"],))
     rows = cur.fetchall()
-    cur.close()
-    return render_template("penjualan_hari_ini.html", rows=rows, toko=user["toko"])
 
+    # ambil detail barang keluar hari ini
+    cur.execute("""
+        SELECT tx8, tanggal, pembeli, no_hp, barcode, item_nama, qty, harga_jual, subtotal, laba
+        FROM v_penjualan_detail_hari_ini
+        WHERE toko_id = %s
+        ORDER BY tanggal, item_nama
+    """, (user["toko"]["id"],))
+    detail_rows = cur.fetchall()
+
+    cur.close()
+    return render_template(
+        "penjualan_hari_ini.html",
+        rows=rows,
+        detail_rows=detail_rows,
+        toko=user["toko"]
+    )
+
+@app.route("/penjualan-hari-ini/print-detail")
+@login_required
+def print_detail_hari_ini():
+    """Cetak laporan detail barang keluar hari ini (HTML siap print)."""
+    user = get_current_user()
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT tx8, tanggal, pembeli, no_hp, barcode, item_nama, qty, harga_jual, subtotal, laba
+        FROM v_penjualan_detail_hari_ini
+        WHERE toko_id = %s
+        ORDER BY tanggal, item_nama
+    """, (user["toko"]["id"],))
+    rows = cur.fetchall()
+    cur.close()
+
+    return render_template(
+        "print_detail_hari_ini.html",
+        rows=rows,
+        toko=user["toko"]
+    )
+
+@app.route("/penjualan-hari-ini/print-transaksi")
+@login_required
+def print_transaksi_hari_ini():
+    """Cetak laporan transaksi hari ini (HTML siap print)."""
+    user = get_current_user()
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT tanggal, tx8, nama, no_hp, metode_bayar, jml_item, total, laba
+        FROM v_penjualan_hari_ini
+        WHERE DATE(tanggal) = CURRENT_DATE
+          AND toko_id = %s
+        ORDER BY tanggal
+    """, (user["toko"]["id"],))
+    rows = cur.fetchall()
+    cur.close()
+
+    return render_template(
+        "print_transaksi_hari_ini.html",
+        rows=rows,
+        toko=user["toko"]
+    )
 
 @app.route("/laporan")
 @login_required
