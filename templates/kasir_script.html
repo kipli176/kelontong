@@ -273,12 +273,22 @@
         openModal("itemModal");
         prefillFromMaster(val);
 
-        // langsung fokus ke qty
         setTimeout(() => {
-            document.getElementById("mQty")?.focus();
-            document.getElementById("mQty")?.select();
+            const nama = document.getElementById("mNama").value.trim();
+            const harga = document.getElementById("mHargaJual").value.trim();
+
+            if (!nama || !harga) {
+                // 🚨 Barang tidak ada di master → fokus ke Nama
+                document.getElementById("mNama")?.focus();
+                document.getElementById("mNama")?.select();
+            } else {
+                // ✅ Barang ada → fokus ke Qty
+                document.getElementById("mQty")?.focus();
+                document.getElementById("mQty")?.select();
+            }
         }, 30);
-    } 
+    }
+
 
     // ======= CART (KERANJANG) =======
     function renderCart() {
@@ -377,6 +387,8 @@
         const hb = parseInt(document.getElementById("mHargaBeli").value || "0");
         const qty = Math.max(1, parseInt(document.getElementById("mQty").value || "1"));
         const potongan = 0;
+        if (isNaN(hj) || hj <= 0) return alert("Harga jual wajib diisi dan lebih dari 0");
+        if (isNaN(hb) || hb < 0) return alert("Harga beli wajib diisi dan lebih dari 0");
 
         const ex = cart.find((i) => i.barcode === barcode && i.harga_jual === hj);
         if (ex) {
@@ -739,9 +751,11 @@
     }
 
     function focusQuickBarcode() {
-        setTimeout(() => {
-            document.getElementById("quickBarcode")?.focus();
-        }, 30);
+        const el = document.getElementById("quickBarcode");
+        if (el) {
+            el.focus();
+            el.select();
+        }
     }
        
 
