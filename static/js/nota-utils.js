@@ -136,6 +136,7 @@
       html += formatLine("Kembali", fmt(nota.kembali), width) + "\n";
       html += `Metode: ${nota.metode}\n\n`;
       html += centerText("Terima kasih 🙏", width) + "\n";
+      html += '<div class="page-break"></div>';
       html += "</div>";
       return html;
     }
@@ -211,6 +212,10 @@
       <title>Nota</title>
       <style>
         body { margin:0; font-family:monospace; }
+        .page-break {
+        page-break-after: always; /* CSS lama */
+        break-after: page;        /* CSS baru */
+        }
         @media print {
           @page { margin: 0; }
           body { margin: 0; }
