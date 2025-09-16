@@ -32,3 +32,48 @@ function initPaperSizeSelector() {
 
 // jalankan saat halaman siap
 document.addEventListener("DOMContentLoaded", initPaperSizeSelector);
+
+
+
+const btnFs = document.getElementById('btnFullscreen');
+btnFs.onclick = () => {
+    if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen();
+    } else {
+        document.exitFullscreen();
+    }
+};
+document.addEventListener('fullscreenchange', () => {
+    btnFs.textContent = document.fullscreenElement ? "❌" : "🔲";
+    btnFs.title = document.fullscreenElement ? "Keluar Fullscreen" : "Masuk Fullscreen";
+});
+ 
+// Register service worker
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("/static/service-worker.js")
+    .then(() => console.log("Service Worker registered"))
+    .catch(err => console.log("SW failed:", err));
+}
+
+// Install prompt
+let deferredPrompt;
+const installBtn = document.createElement("button");
+installBtn.textContent = "⬇️ Install Program Kasir";
+installBtn.className = "fixed bottom-4 right-4 bg-emerald-600 text-white px-4 py-2 rounded shadow-lg hidden";
+document.body.appendChild(installBtn);
+
+window.addEventListener("beforeinstallprompt", (e) => {
+  e.preventDefault();
+  deferredPrompt = e;
+  installBtn.classList.remove("hidden");
+});
+
+installBtn.addEventListener("click", async () => {
+  installBtn.classList.add("hidden");
+  if (deferredPrompt) {
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    console.log(`User response: ${outcome}`);
+    deferredPrompt = null;
+  }
+}); 

@@ -3,7 +3,7 @@
 
 <head>
   <meta charset="UTF-8" />
-  <title>Penjualan Hari Ini — Kasir</title>
+  <title>Laporan Penjualan — Kasir</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link href="/static/css/style.css" rel="stylesheet">
 </head>
@@ -13,11 +13,13 @@
 
   <!-- Header Navigasi (konsisten) -->
   <header class="bg-blue-600 text-white p-4 flex justify-between items-center">
-    <div class="text-xl font-bold">📄 Penjualan Hari Ini</div>
+    <div class="text-xl font-bold">📄 Laporan Penjualan</div>
     <nav class="flex gap-4 text-sm">
-      <a href="{{ url_for('kasir') }}" class="hover:underline">🏠 Kasir</a>
-      <a href="{{ url_for('penjualan') }}" class="font-semibold :underline font-semibold underline">📄 Penjualan Hari
-        Ini</a>
+      <a href="{{ url_for('kasir') }}" class="rounded py-1 px-3 hover:bg-emerald-600">🏠 Kasir</a>
+      <a href="{{ url_for('penjualan') }}" class="bg-slate-200 rounded py-1 px-3 text-slate-600 hover:bg-emerald-600">📄 Laporan</a>
+      <button id="btnFullscreen" class="border rounded ml-auto px-1 py-1 rounded hover:bg-slate-600" title="Fullscreen">
+        🔲
+      </button>
     </nav>
   </header>
 
@@ -26,15 +28,16 @@
 
     <!-- Tabs -->
     <section class="bg-white rounded shadow-sm p-3 flex flex-col gap-3 overflow-hidden">
-      <div class="flex gap-2 mb-3">
-        <button id="tabTransaksi" class="px-3 py-2 rounded bg-slate-200">Transaksi</button>
-        <button id="tabDetail" class="px-3 py-2 rounded">Detail Barang</button>
+      <div class="flex gap-1 border-b">
+        <button id="tabTransaksi" class="px-3 py-2 rounded-t bg-white border border-b-0">Transaksi</button>
+        <button id="tabDetail" class="px-3 py-2 rounded-t bg-slate-100 text-slate-600 border">Detail Barang</button>
+        <button id="tabLaporan" class="px-3 py-2 rounded-t bg-slate-100 text-slate-600 border">Laporan</button>
       </div>
 
       <!-- ===================== -->
       <!-- TAB TRANSAKSI (lama) -->
       <!-- ===================== -->
-      <div id="paneTransaksi">              
+      <div id="paneTransaksi" class="border p-4 rounded-b bg-white">              
         <div class="flex justify-between mb-2 items-center">
           <h3 class="font-semibold">
             Transaksi Hari Ini
@@ -44,7 +47,11 @@
           </h3>
           <div class="flex gap-2 items-center">
             <form method="get" class="flex gap-1 items-center">
+              <label class="text-sm text-slate-600">Periode:</label>
+              <input type="hidden" name="tab" id="inputTab" value="transaksi">
+              <label class="text-sm text-slate-600">Dari</label>
               <input type="date" name="start" value="{{ start }}" class="border rounded px-3 py-2 text-sm">
+              <label class="text-sm text-slate-600">Hingga</label>
               <input type="date" name="end" value="{{ end }}" class="border rounded px-3 py-2 text-sm">
               <button type="submit" class="px-3 py-2 bg-blue-600 text-white rounded text-sm">Terapkan</button>
             </form>
@@ -54,7 +61,7 @@
               class="px-3 py-2 bg-emerald-600 text-white rounded text-sm">⬇️ Export Excel</a>
           </div>
         </div>
-        <div class="border rounded overflow-auto max-h-96">
+        <div class="border rounded overflow-auto max-h-[60vh]">
           <table class="w-full text-sm">
             <thead class="bg-slate-100 sticky top-0">
               <tr>
@@ -115,7 +122,7 @@
       <!-- ======================= -->
       <!-- TAB DETAIL BARANG (baru) -->
       <!-- ======================= -->
-      <div id="paneDetail" class="hidden">
+      <div id="paneDetail" class="hidden border p-4 rounded-b bg-white">
         <div class="flex justify-between mb-2 items-center">
           <h3 class="font-semibold">
             Barang Keluar Hari Ini
@@ -125,7 +132,11 @@
           </h3>
           <div class="flex gap-2 items-center">
             <form method="get" class="flex gap-1 items-center">
+              <label class="text-sm text-slate-600">Periode:</label>
+              <input type="hidden" name="tab" id="inputTab" value="detail">
+              <label class="text-sm text-slate-600">Dari</label>
               <input type="date" name="start" value="{{ start }}" class="border rounded px-3 py-2 text-sm">
+              <label class="text-sm text-slate-600">Hingga</label>
               <input type="date" name="end" value="{{ end }}" class="border rounded px-3 py-2 text-sm">
               <button type="submit" class="px-3 py-2 bg-blue-600 text-white rounded text-sm">Terapkan</button>
             </form>
@@ -136,7 +147,7 @@
           </div>
         </div>
 
-        <div class="border rounded overflow-auto max-h-96">
+        <div class="border rounded overflow-auto max-h-[60vh]">
           <table class="w-full text-sm">
             <thead class="bg-slate-100 sticky top-0">
               <tr>
@@ -175,16 +186,125 @@
             </tbody>
             <tfoot class="bg-slate-200 font-semibold">
               <tr>
-                <td class="p-2 border text-right" colspan="2">TOTAL</td>
+                <td class="p-2 border" colspan="2"></td> 
+                <td class="p-2 border text-right" colspan="1">TOTAL</td>
                 <td class="p-2 border text-right">{{ nd.gqty }}</td>
                 <td class="p-2 border text-right">Rp {{ "{:,.0f}".format(nd.gtotal) }}</td>
                 <td class="p-2 border text-right text-emerald-700">Rp {{ "{:,.0f}".format(nd.glaba) }}</td>
-                <td class="p-2 border"></td>
+                <td class="p-2 border"></td> 
               </tr>
             </tfoot>
           </table>
         </div>
       </div>
+
+      <div id="paneLaporan" class="hidden border p-4 rounded-b bg-white">
+        <div class="flex justify-between mb-2 items-center">
+          <h3 class="font-semibold">
+            Laporan Penjualan
+            <small class="text-slate-600">({{ keterangan_tanggal }})</small>
+          </h3>
+          <div class="flex gap-2 items-center">
+            <form method="get" class="flex gap-1 items-center">
+              <label class="text-sm text-slate-600">Periode:</label>
+              <input type="hidden" name="tab" id="inputTab" value="laporan">
+              <label class="text-sm text-slate-600">Dari</label>
+              <input type="date" name="start" value="{{ start }}" class="border rounded px-3 py-2 text-sm">
+              <label class="text-sm text-slate-600">Hingga</label>
+              <input type="date" name="end" value="{{ end }}" class="border rounded px-3 py-2 text-sm">
+              <button type="submit" class="px-3 py-2 bg-blue-600 text-white rounded text-sm">Terapkan</button>
+            </form> 
+          </div>
+        </div>
+
+        <!-- Ringkasan KPI -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+          <div class="p-4 bg-blue-100 rounded text-center">
+            <div class="text-xl font-bold">{{ total_transaksi }}</div>
+            <div class="text-slate-600">Transaksi</div>
+          </div>
+          <div class="p-4 bg-green-100 rounded text-center">
+            <div class="text-xl font-bold">{{ total_item }}</div>
+            <div class="text-slate-600">Item Terjual</div>
+          </div>
+          <div class="p-4 bg-yellow-100 rounded text-center">
+            <div class="text-xl font-bold">Rp {{ "{:,.0f}".format(total_omzet or 0) }}</div>
+            <div class="text-slate-600">Omzet</div>
+          </div>
+          <div class="p-4 bg-emerald-100 rounded text-center">
+            <div class="text-xl font-bold">Rp {{ "{:,.0f}".format(total_laba or 0) }}</div>
+            <div class="text-slate-600">Laba</div>
+          </div>
+        </div>
+
+        <!-- Tabel Ringkasan per Hari -->
+        <h4 class="font-semibold mb-2">Ringkasan Harian</h4>
+        <div class="overflow-auto max-h-[60vh] border rounded">
+          <table class="w-full text-sm border-collapse">
+            <thead class="bg-slate-100 sticky top-0">
+              <tr>
+                <th class="p-2 border">Tanggal</th>
+                <th class="p-2 border text-right">Transaksi</th>
+                <th class="p-2 border text-right">Item</th>
+                <th class="p-2 border text-right">Omzet</th>
+                <th class="p-2 border text-right">Laba</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for tgl, jml_transaksi, jml_item, omzet, laba in ringkasan_rows %}
+              <tr>
+                <td class="p-2 border">{{ tgl.strftime("%d %B %Y") }}</td>
+                <td class="p-2 border text-right">{{ jml_transaksi }}</td>
+                <td class="p-2 border text-right">{{ jml_item }}</td>
+                <td class="p-2 border text-right">Rp {{ "{:,.0f}".format(omzet or 0) }}</td>
+                <td class="p-2 border text-right">Rp {{ "{:,.0f}".format(laba or 0) }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Barang Terlaris -->
+        <h4 class="font-semibold mt-6 mb-2">Top 10 Barang Terlaris</h4>
+        <div class="overflow-auto max-h-[60vh] border rounded">
+          <table class="w-full text-sm border-collapse">
+            <thead class="bg-slate-100 sticky top-0">
+              <tr>
+                <th class="p-2 border">Barang</th>
+                <th class="p-2 border text-right">Qty</th>
+                <th class="p-2 border text-right">Omzet</th>
+                <th class="p-2 border text-right">Laba</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% set ns = namespace(total_qty=0, total_omzet=0, total_laba=0) %}
+              {% for barcode, item, qty, omzet, laba in terlaris_rows %}
+                <tr>
+                  <td class="p-2 border">{{ item }}</td>
+                  <td class="p-2 border text-right">{{ qty }}</td>
+                  <td class="p-2 border text-right">Rp {{ "{:,.0f}".format(omzet or 0) }}</td>
+                  <td class="p-2 border text-right">Rp {{ "{:,.0f}".format(laba or 0) }}</td>
+                </tr>
+                {% set ns.total_qty = ns.total_qty + (qty or 0) %}
+                {% set ns.total_omzet = ns.total_omzet + (omzet or 0) %}
+                {% set ns.total_laba = ns.total_laba + (laba or 0) %}
+              {% endfor %}
+            </tbody>
+            <tfoot class="bg-slate-200 font-semibold">
+              <tr>
+                <td class="p-2 border text-right">TOTAL</td>
+                <td class="p-2 border text-right">{{ ns.total_qty }}</td>
+                <td class="p-2 border text-right">Rp {{ "{:,.0f}".format(ns.total_omzet) }}</td>
+                <td class="p-2 border text-right">Rp {{ "{:,.0f}".format(ns.total_laba) }}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+
+
+      </div>
+
+
 <!-- Modal -->
 <div id="modalDetailBarang" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
   <div class="bg-white rounded shadow-lg w-3/4 max-h-[80vh] overflow-auto p-4">
@@ -262,26 +382,50 @@ function closeModal(){
 }
 </script>
 
+<script>
+  const tabT = document.getElementById('tabTransaksi');
+  const tabD = document.getElementById('tabDetail');
+  const tabL = document.getElementById('tabLaporan');
 
-  <script>
-    const tabT = document.getElementById('tabTransaksi');
-    const tabD = document.getElementById('tabDetail');
-    const paneT = document.getElementById('paneTransaksi');
-    const paneD = document.getElementById('paneDetail'); 
+  const paneT = document.getElementById('paneTransaksi');
+  const paneD = document.getElementById('paneDetail');
+  const paneL = document.getElementById('paneLaporan');
 
-    function activate(tab) {
-      if (tab === 'transaksi') {
-        paneT.classList.remove('hidden'); paneD.classList.add('hidden');
-        tabT.classList.add('bg-slate-200'); tabD.classList.remove('bg-slate-200'); 
-      } else {
-        paneD.classList.remove('hidden'); paneT.classList.add('hidden');
-        tabD.classList.add('bg-slate-200'); tabT.classList.remove('bg-slate-200'); 
-      }
+  const inputTab = document.getElementById('inputTab');
+
+  function activate(tab) {
+    [tabT, tabD, tabL].forEach(btn => {
+      btn.classList.remove('bg-white','border-b-0','text-black');
+      btn.classList.add('bg-slate-100','text-slate-600');
+    });
+    [paneT, paneD, paneL].forEach(pane => pane.classList.add('hidden'));
+
+    if (tab === 'transaksi') {
+      tabT.classList.add('bg-white','border-b-0','text-black');
+      tabT.classList.remove('bg-slate-100','text-slate-600');
+      paneT.classList.remove('hidden');
+    } else if (tab === 'detail') {
+      tabD.classList.add('bg-white','border-b-0','text-black');
+      tabD.classList.remove('bg-slate-100','text-slate-600');
+      paneD.classList.remove('hidden');
+    } else if (tab === 'laporan') {
+      tabL.classList.add('bg-white','border-b-0','text-black');
+      tabL.classList.remove('bg-slate-100','text-slate-600');
+      paneL.classList.remove('hidden');
     }
-    tabT.onclick = () => activate('transaksi');
-    tabD.onclick = () => activate('detail');
-    activate('transaksi');
-  </script>
+  }
+
+  tabT.onclick = () => activate('transaksi');
+  tabD.onclick = () => activate('detail');
+  tabL.onclick = () => activate('laporan'); 
+
+  // default aktif → baca dari query string
+  const params = new URLSearchParams(window.location.search);
+  const currentTab = params.get('tab') || 'transaksi';
+  // default aktif: transaksi
+  activate(currentTab);
+</script>
+
   <!-- Script: cetak & WA -->
   <script>
     const fmt = n => "Rp " + (n || 0).toLocaleString('id-ID');
